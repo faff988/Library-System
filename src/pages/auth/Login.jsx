@@ -1,15 +1,17 @@
 import { useState } from "react";
 import { Mail, Lock, Eye, EyeOff, ArrowRight } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import logo from '../../assets/logo.png';
 
 export default function Login() {
+  const navigate = useNavigate();
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
   const [form, setForm] = useState({ identifier: "", password: "" });
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    // TODO: connect to backend
+    navigate("/dashboard");
     console.log("Login:", form);
   };
 
@@ -18,7 +20,7 @@ export default function Login() {
 
       {/* Logo + Title */}
       <div className="flex flex-col items-center mb-8">
-        <div className="text-5xl mb-4">📚</div>
+        <img src={logo} alt="Logo" className="w-24 h-28 mb-2" />
         <h1 className="text-4xl font-bold text-[#055E83]">Siem Reap Bannalay</h1>
         <p className="text-[#64748B] mt-1 text-sm tracking-wide">Library Management System</p>
       </div>
