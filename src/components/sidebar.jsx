@@ -2,37 +2,61 @@ import { useState } from "react";
 import logo from "../assets/logo.png";
 import {
   LayoutDashboard,
+  Library,
   ArrowLeftRight,
   MessageSquare,
   CalendarDays,
   HeartHandshake,
   BarChart2,
   Settings,
+  Star,
   BookOpen,
+  BookX,
+  Receipt,
+  Users,
+  UserCog,
+  CalendarRange,
+  ChevronDown,
 } from "lucide-react";
 
 const navItems = [
-  { label: "Dashboard", icon: LayoutDashboard, href: "#" },
-  { label: "Borrow/Return", icon: ArrowLeftRight, href: "#" },
-  { label: "FeedBack", icon: MessageSquare, href: "#" },
-  { label: "Event", icon: CalendarDays, href: "#" },
-  { label: "Donations", icon: HeartHandshake, href: "#" },
-  { label: "Reports", icon: BarChart2, href: "#" },
+  { label: "Dashboard", icon: LayoutDashboard },
+  { label: "Member", icon: Users },
+  { label: "Borrow/Return", icon: ArrowLeftRight },
+  { label: "FeedBack", icon: MessageSquare },
+  { label: "Event", icon: CalendarDays },
+  { label: "Donations", icon: HeartHandshake },
+  {
+    label: "Reports",
+    icon: BarChart2,
+    children: [
+      { label: "Borrow/Return Report", icon: ArrowLeftRight },
+      { label: "Popular Book Report", icon: Star },
+      { label: "Book Inventory Report", icon: BookOpen },
+      { label: "Lost or Damaged Book Report", icon: BookX },
+      { label: "Fine Report", icon: Receipt },
+      { label: "Member Report", icon: Users },
+      { label: "Staff Activity Report", icon: UserCog },
+      { label: "Daily / Monthly Transaction Report", icon: CalendarRange },
+    ],
+  },
 ];
 
 export default function Sidebar() {
   const [active, setActive] = useState("Dashboard");
+  // FIX: Set Reports to false by default so it stays hidden until clicked
+  const [openMenus, setOpenMenus] = useState({ Reports: false });
+
+  const toggleMenu = (label) =>
+    setOpenMenus((prev) => ({ ...prev, [label]: !prev[label] }));
 
   return (
-    <aside className="flex flex-col h-screen w-64 bg-[#1B4965] text-white select-none font-sans">
+    // FIX: Increased width to w-72 so text does not crunch up into 3 lines
+    <aside className="flex flex-col h-screen w-72 bg-[#1B4965] text-white select-none font-sans overflow-y-auto">
       {/* Logo / Brand */}
       <div className="flex items-center gap-3 px-5 py-6 border-b border-white/10">
         <div className="flex items-center justify-center w-11 h-11 rounded-xl bg-[#F5C842] flex-shrink-0 overflow-hidden">
-          <img
-            src={logo}
-            alt="Logo"
-            className="w-full h-full object-contain p-1"
-          />
+          <img src={logo} alt="Logo" className="w-full h-full object-contain p-1" />
         </div>
         <div className="leading-tight">
           <p className="text-base font-bold tracking-wide">Sieamreap</p>
@@ -42,37 +66,78 @@ export default function Sidebar() {
 
       {/* Navigation */}
       <nav className="flex flex-col gap-1 px-3 py-5 flex-1">
-        {navItems.map(({ label, icon: Icon, href }) => {
+        {navItems.map(({ label, icon: Icon, children }) => {
           const isActive = active === label;
+          const isOpen = openMenus[label];
+
           return (
-            <a
-              key={label}
-              href={href}
-              onClick={(e) => {
-                e.preventDefault();
-                setActive(label);
-              }}
-              className={`
-                flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold
-                transition-all duration-200 group
-                ${
-                  isActive
-                    ? "bg-white text-[#1B4965] shadow-sm"
+            <div key={label}>
+              <a
+                href="#"
+                onClick={(e) => {
+                  e.preventDefault();
+                  if (children) {
+                    toggleMenu(label); // Just toggle open/close if it has child routes
+                  } else {
+                    setActive(label);
+                  }
+                }}
+                className={`
+                  flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold
+                  transition-all duration-200 group
+                  ${isActive
+                    ? "bg-[#F5C842] text-[#1B4965] shadow-sm"
                     : "text-white/80 hover:bg-white/10 hover:text-white"
-                }
-              `}
-            >
-              <Icon
-                size={19}
-                strokeWidth={isActive ? 2.4 : 2}
-                className={`flex-shrink-0 transition-colors duration-200 ${
-                  isActive
-                    ? "text-[#1B4965]"
-                    : "text-white/70 group-hover:text-white"
-                }`}
-              />
-              {label}
-            </a>
+                  }
+                `}
+              >
+                <Icon
+                  size={19}
+                  strokeWidth={isActive ? 2.4 : 2}
+                  className={`flex-shrink-0 transition-colors duration-200 ${
+                    isActive ? "text-[#1B4965]" : "text-white/70 group-hover:text-white"
+                  }`}
+                />
+                <span className="flex-1">{label}</span>
+                {children && (
+                  <ChevronDown
+                    size={15}
+                    className={`transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`}
+                  />
+                )}
+              </a>
+
+              {/* Sub-menu */}
+              {children && isOpen && (
+                <div className="mt-1 ml-4 flex flex-col gap-1 border-l border-white/10 pl-2">
+                  {children.map(({ label: childLabel, icon: ChildIcon }) => {
+                    const isChildActive = active === childLabel;
+                    return (
+                      <a
+                        key={childLabel}
+                        href="#"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          setActive(childLabel);
+                        }}
+                        // FIX: Bumped text to text-[13px] so it is legible and crisp
+                        className={`
+                          flex items-items start gap-3 px-3 py-2 rounded-lg text-[13px] font-medium
+                          transition-all duration-200 group leading-snug
+                          ${isChildActive
+                            ? "text-[#F5C842] font-bold bg-white/5"
+                            : "text-white/70 hover:text-white hover:bg-white/10"
+                          }
+                        `}
+                      >
+                        <ChildIcon size={16} strokeWidth={2} className="flex-shrink-0 mt-0.5" />
+                        <span className="flex-1">{childLabel}</span>
+                      </a>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           );
         })}
       </nav>
@@ -88,10 +153,9 @@ export default function Sidebar() {
           className={`
             flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold
             transition-all duration-200 group
-            ${
-              active === "Settings"
-                ? "bg-white text-[#1B4965] shadow-sm"
-                : "text-white/80 hover:bg-white/10 hover:text-white"
+            ${active === "Settings"
+              ? "bg-[#F5C842] text-[#1B4965] shadow-sm"
+              : "text-white/80 hover:bg-white/10 hover:text-white"
             }
           `}
         >
@@ -99,9 +163,7 @@ export default function Sidebar() {
             size={19}
             strokeWidth={active === "Settings" ? 2.4 : 2}
             className={`flex-shrink-0 transition-colors duration-200 ${
-              active === "Settings"
-                ? "text-[#1B4965]"
-                : "text-white/70 group-hover:text-white"
+              active === "Settings" ? "text-[#1B4965]" : "text-white/70 group-hover:text-white"
             }`}
           />
           Settings
