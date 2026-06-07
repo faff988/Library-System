@@ -20,7 +20,7 @@ export default function Login() {
 
       {/* Logo + Title */}
       <div className="flex flex-col items-center mb-8">
-        <img src={logo} alt="Logo" className="w-24 h-28 mb-2" />
+        <img src={logo} alt="Logo" className="w-24 h-24 mb-2" />
         <h1 className="text-4xl font-bold text-[#055E83]">Siem Reap Bannalay</h1>
         <p className="text-[#64748B] mt-1 text-sm tracking-wide">Library Management System</p>
       </div>
