@@ -71,18 +71,17 @@ const navItems = [
 export default function Sidebar() {
   const navigate = useNavigate();
   const location = useLocation();
-  // FIX: Set Reports to false by default so it stays hidden until clicked
   const [openMenus, setOpenMenus] = useState({ Reports: false });
 
   const toggleMenu = (label) =>
     setOpenMenus((prev) => ({ ...prev, [label]: !prev[label] }));
 
   return (
-    // FIX: Increased width to w-72 so text does not crunch up into 3 lines
-    <aside className="flex flex-col h-screen w-90 bg-[#1B4965] text-white select-none font-sans overflow-hidden">
+    // Standard sidebar width: w-64 (256px)
+    <aside className="flex flex-col h-screen w-64 bg-[#1B4965] text-white select-none font-sans overflow-hidden">
       {/* Logo / Brand */}
-      <div className="flex items-center gap-3 px-5 py-6 border-b border-white/10">
-        <div className="flex items-center justify-center w-20 h-20 rounded-xl bg-[#F5C842] flex-shrink-0 overflow-hidden">
+      <div className="flex items-center gap-3 px-4 py-5 border-b border-white/10">
+        <div className="flex items-center justify-center w-14 h-14 rounded-xl bg-[#F5C842] flex-shrink-0 overflow-hidden">
           <img
             src={logo}
             alt="Logo"
@@ -90,13 +89,13 @@ export default function Sidebar() {
           />
         </div>
         <div className="leading-tight">
-          <p className="text-2xl font-bold tracking-wide">Sieamreap</p>
-          <p className="text-2xl font-bold tracking-wide">Bannalay</p>
+          <p className="text-base font-bold tracking-wide">Sieamreap</p>
+          <p className="text-base font-bold tracking-wide">Bannalay</p>
         </div>
       </div>
 
       {/* Navigation */}
-      <nav className="flex flex-col gap-1 px-3 py-5 flex-1 overflow-y-auto">
+      <nav className="flex flex-col gap-1 px-2 py-4 flex-1 overflow-y-auto">
         {navItems.map(({ label, icon: Icon, children, path }) => {
           const isActive = children
             ? children.some((c) => location.pathname === c.path)
@@ -116,7 +115,7 @@ export default function Sidebar() {
                   }
                 }}
                 className={`
-                  flex items-center gap-4 px-4 py-3.5 rounded-xl text-2xl font-bold
+                  flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold
                   transition-all duration-200 group
                   ${
                     isActive
@@ -126,7 +125,7 @@ export default function Sidebar() {
                 `}
               >
                 <Icon
-                  size={28}
+                  size={20}
                   strokeWidth={isActive ? 2.4 : 2}
                   className={`flex-shrink-0 transition-colors duration-200 ${
                     isActive
@@ -134,18 +133,18 @@ export default function Sidebar() {
                       : "text-white/70 group-hover:text-white"
                   }`}
                 />
-                <span className="flex-1">{label}</span>
+                <span className="flex-1 truncate">{label}</span>
                 {children && (
                   <ChevronDown
-                    size={26}
-                    className={`transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`}
+                    size={16}
+                    className={`flex-shrink-0 transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`}
                   />
                 )}
               </a>
 
               {/* Sub-menu */}
               {children && isOpen && (
-                <div className="mt-1.5 ml-4 flex flex-col gap-1 border-l border-white/10 pl-3">
+                <div className="mt-1 ml-3 flex flex-col gap-0.5 border-l border-white/10 pl-3">
                   {children.map(
                     ({
                       label: childLabel,
@@ -162,7 +161,7 @@ export default function Sidebar() {
                             navigate(childPath);
                           }}
                           className={`
-                          flex items-start gap-3 px-3 py-2.5 rounded-lg text-lg font-semibold
+                          flex items-start gap-2.5 px-2.5 py-2 rounded-lg text-xs font-semibold
                           transition-all duration-200 group leading-snug
                           ${
                             isChildActive
@@ -172,7 +171,7 @@ export default function Sidebar() {
                         `}
                         >
                           <ChildIcon
-                            size={24}
+                            size={16}
                             strokeWidth={2}
                             className="flex-shrink-0 mt-0.5"
                           />
@@ -189,7 +188,7 @@ export default function Sidebar() {
       </nav>
 
       {/* Settings — pinned to bottom */}
-      <div className="px-3 pb-6 border-t border-white/10 pt-4">
+      <div className="px-2 pb-5 border-t border-white/10 pt-3">
         <a
           href="#"
           onClick={(e) => {
@@ -197,7 +196,7 @@ export default function Sidebar() {
             navigate("/settings");
           }}
           className={`
-            flex items-center gap-4 px-4 py-3.5 rounded-xl text-xl font-bold
+            flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold
             transition-all duration-200 group
             ${
               location.pathname === "/settings"
@@ -207,7 +206,7 @@ export default function Sidebar() {
           `}
         >
           <Settings
-            size={28}
+            size={20}
             strokeWidth={location.pathname === "/settings" ? 2.4 : 2}
             className={`flex-shrink-0 transition-colors duration-200 ${
               location.pathname === "/settings"
