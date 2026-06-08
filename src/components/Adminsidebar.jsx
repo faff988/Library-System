@@ -32,14 +32,38 @@ const navItems = [
     label: "Reports",
     icon: BarChart2,
     children: [
-      {label: "Borrow/Return Report",icon: ArrowLeftRight,path: "/reports/borrow-return",},
-      {label: "Popular Book Report",icon: Star,path: "/reports/popular-book",},
-      {label: "Book Inventory Report",icon: BookOpen,path: "/reports/book-inventory",},
-      {label: "Lost or Damaged Book Report",icon: BookX,path: "/reports/lost-damaged",},
+      {
+        label: "Borrow/Return Report",
+        icon: ArrowLeftRight,
+        path: "/reports/borrow-return",
+      },
+      {
+        label: "Popular Book Report",
+        icon: Star,
+        path: "/reports/popular-book",
+      },
+      {
+        label: "Book Inventory Report",
+        icon: BookOpen,
+        path: "/reports/book-inventory",
+      },
+      {
+        label: "Lost or Damaged Book Report",
+        icon: BookX,
+        path: "/reports/lost-damaged",
+      },
       { label: "Fine Report", icon: Receipt, path: "/reports/fine" },
       { label: "Member Report", icon: Users, path: "/reports/member" },
-      {label: "Staff Activity Report",icon: UserCog,path: "/reports/staff-activity",},
-      {label: "Daily / Monthly Transaction Report",icon: CalendarRange,path: "/reports/transactions",},
+      {
+        label: "Staff Activity Report",
+        icon: UserCog,
+        path: "/reports/staff-activity",
+      },
+      {
+        label: "Daily / Monthly Transaction Report",
+        icon: CalendarRange,
+        path: "/reports/transactions",
+      },
     ],
   },
 ];
