@@ -172,20 +172,20 @@ function DonationsList({ onAdd, onView }) {
 
         <div className="flex gap-5">
           <div className="flex-1 bg-white rounded-xl border border-dashed border-[#1B4965]/25 shadow-sm overflow-hidden">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-              <h2 className="text-lg font-bold text-gray-700">
+            <div className="flex items-center justify-between px-6 py-4 border-b" style={{ backgroundColor: "#1B4965" }}>
+              <h2 className="text-lg font-bold text-white">
                 Recent Donations
               </h2>
               <button
                 onClick={onAdd}
-                className="flex items-center gap-2 bg-[#1B4965] text-white text-md font-semibold px-4 py-2 rounded-lg hover:bg-[#144056] transition shadow-sm"
+                className="flex items-center gap-2 bg-[#1B4965] text-md font-bold px-4 py-2 rounded-lg hover:bg-[#144056] transition shadow-sm"style={{ backgroundColor: "#E8C110", color: "#1B4965" }}
               >
                 <Plus size={18} /> Add Donation
               </button>
             </div>
             <table className="w-full">
               <thead>
-                <tr className="text-sm font-bold text-gray-400 uppercase border-b border-gray-100 bg-gray-50/50">
+                <tr className="text-xs font-bold uppercase tracking-wide" style={{ color: "#055E83" }}>
                   <th className="text-left px-6 py-3.5 tracking-wider">
                     Donor
                   </th>

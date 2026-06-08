@@ -136,7 +136,7 @@ export default function Inventory() {
             </div>
 
             {/* Column Headers */}
-            <div className="grid grid-cols-[60px_1fr_160px_120px_80px_130px_110px] px-6 py-3 border-b border-gray-100 bg-gray-50">
+            <div className="grid grid-cols-[60px_300px_180px_150px_150px_170px_1fr] px-6 py-3 border-b border-gray-100 bg-gray-50">
               {["#", "Title / Author", "ISBN", "Category", "Copies", "Status", "Actions"].map((h) => (
                 <span key={h} className="text-xs font-bold uppercase tracking-wide" style={{ color: "#055E83" }}>
                   {h}
@@ -148,8 +148,7 @@ export default function Inventory() {
             {filtered.map((book, i) => (
               <div
                 key={book.id}
-                className="grid grid-cols-[60px_1fr_160px_120px_80px_130px_110px] px-6 py-4 items-center border-b border-gray-50 hover:bg-gray-50 transition"
-              >
+                className="grid grid-cols-[60px_300px_180px_150px_150px_170px_1fr] px-6 py-4 items-center border-b border-gray-50 hover:bg-gray-50 transition">
                 <span className="text-sm text-gray-400">{book.id}</span>
                 <div>
                   <p className="text-sm font-semibold text-gray-800">{book.title}</p>
