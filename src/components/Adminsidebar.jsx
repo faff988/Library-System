@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import logo from "../assets/logo.png";
 import {
   LayoutDashboard,
@@ -70,7 +70,7 @@ const navItems = [
 
 export default function Sidebar() {
   const navigate = useNavigate();
-  const [active, setActive] = useState("Dashboard");
+  const location = useLocation();
   // FIX: Set Reports to false by default so it stays hidden until clicked
   const [openMenus, setOpenMenus] = useState({ Reports: false });
 
@@ -98,7 +98,9 @@ export default function Sidebar() {
       {/* Navigation */}
       <nav className="flex flex-col gap-1 px-3 py-5 flex-1 overflow-y-auto">
         {navItems.map(({ label, icon: Icon, children, path }) => {
-          const isActive = active === label;
+          const isActive = children
+            ? children.some((c) => location.pathname === c.path)
+            : location.pathname === path;
           const isOpen = openMenus[label];
 
           return (
@@ -110,7 +112,6 @@ export default function Sidebar() {
                   if (children) {
                     toggleMenu(label);
                   } else {
-                    setActive(label);
                     navigate(path);
                   }
                 }}
@@ -151,14 +152,13 @@ export default function Sidebar() {
                       icon: ChildIcon,
                       path: childPath,
                     }) => {
-                      const isChildActive = active === childLabel;
+                      const isChildActive = location.pathname === childPath;
                       return (
                         <a
                           key={childLabel}
                           href="#"
                           onClick={(e) => {
                             e.preventDefault();
-                            setActive(childLabel);
                             navigate(childPath);
                           }}
                           className={`
@@ -194,13 +194,13 @@ export default function Sidebar() {
           href="#"
           onClick={(e) => {
             e.preventDefault();
-            setActive("Settings");
+            navigate("/settings");
           }}
           className={`
             flex items-center gap-4 px-4 py-3.5 rounded-xl text-xl font-bold
             transition-all duration-200 group
             ${
-              active === "Settings"
+              location.pathname === "/settings"
                 ? "bg-[#F5C842] text-[#1B4965] shadow-sm"
                 : "text-white/80 hover:bg-white/10 hover:text-white"
             }
@@ -208,9 +208,9 @@ export default function Sidebar() {
         >
           <Settings
             size={28}
-            strokeWidth={active === "Settings" ? 2.4 : 2}
+            strokeWidth={location.pathname === "/settings" ? 2.4 : 2}
             className={`flex-shrink-0 transition-colors duration-200 ${
-              active === "Settings"
+              location.pathname === "/settings"
                 ? "text-[#1B4965]"
                 : "text-white/70 group-hover:text-white"
             }`}
