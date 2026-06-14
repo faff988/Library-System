@@ -9,6 +9,7 @@ import BorrowReturn from "./pages/Borrow-Return";
 import Reports from "./pages/Reports";
 import Member from "./pages/Member";
 import Feedbacks from "./pages/FeedBacks";
+import Settings from "./pages/Settings";
 
 export default function App() {
   return (
@@ -24,6 +25,7 @@ export default function App() {
       <Route path="/reports" element={<Reports />} />
       <Route path="/member" element={<Member />} />
       <Route path="/feedback" element={<Feedbacks />} />
+      <Route path="/settings" element= {<Settings/>} />
     </Routes>
   );
 }
