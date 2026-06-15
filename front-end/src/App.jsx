@@ -12,6 +12,9 @@ import Reports from "./pages/Reports";
 import Member from "./pages/Member";
 import Feedbacks from "./pages/FeedBacks";
 import Settings from "./pages/Settings";
+import PopularBookReport from "./pages/PopularBookReport";
+import BookInventoryReport from "./pages/BookIneventoryReport";
+import LostdamagedReport from "./pages/LostdamagedReport";
 
 export default function App() {
   return (
@@ -30,6 +33,9 @@ export default function App() {
       <Route path="/member" element={<Member />} />
       <Route path="/feedback" element={<Feedbacks />} />
       <Route path="/settings" element= {<Settings/>} />
+      <Route path="/reports/popular-book" element={<PopularBookReport />} />
+      <Route path="/reports/book-inventory" element={<BookInventoryReport />} />
+      <Route path="/reports/lost-damaged" element={<LostdamagedReport />} />
     </Routes>
   );
 }

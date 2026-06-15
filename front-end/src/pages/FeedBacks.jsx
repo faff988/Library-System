@@ -764,19 +764,19 @@ function ReplyView({ fb, onCancel, onSend }) {
 
 // ─── ROOT ─────────────────────────────────────────────────────────────────────
 export default function FeedbackPage() {
-  const [view, setView] = useState("list"); // list | detail | reply
+  const [view, setView] = useState("list");
   const [selected, setSelected] = useState(null);
   const [feedbacks, setFeedbacks] = useState(FEEDBACKS);
   const [deleteTarget, setDeleteTarget] = useState(null);
 
+  // Handlers
   function handleView(fb) { setSelected(fb); setView("detail"); }
   function handleReply(fb) { setSelected(fb); setView("reply"); }
-  function handleBack() { setView("list"); setSelected(null); }
   function handleDeleteClick(fb) { setDeleteTarget(fb); }
 
   function handleDeleteConfirm() {
     setFeedbacks((prev) =>
-      prev.map((f) => f.id === deleteTarget.id ? { ...f, status: "NOT REPLIED" } : f)
+      prev.map((f) => (f.id === deleteTarget.id ? { ...f, status: "NOT REPLIED" } : f))
     );
     setDeleteTarget(null);
     if (view === "detail") setView("list");
@@ -784,71 +784,68 @@ export default function FeedbackPage() {
 
   function handleSendReply(replyText) {
     setFeedbacks((prev) =>
-      prev.map((f) => f.id === selected.id ? { ...f, status: "REPLIED" } : f)
+      prev.map((f) => (f.id === selected.id ? { ...f, status: "REPLIED" } : f))
     );
-    setSelected((s) => s ? { ...s, status: "REPLIED" } : s);
+    setSelected((s) => (s ? { ...s, status: "REPLIED" } : s));
     setView("detail");
   }
 
+  // Determine breadcrumb based on view
+  const getBreadcrumb = () => {
+    if (view === "list") return "Home › Feedback";
+    if (view === "detail") return "Home › Feedback › Details";
+    return "Home › Feedback › Reply";
+  };
+
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        background: C.bg,
-        padding: "28px 36px",
-        fontFamily: "'Inter', 'Segoe UI', sans-serif",
-        boxSizing: "border-box",
-      }}
-    >
-      {/* Page title */}
-      <div style={{ marginBottom: 24 }}>
-        <h1 style={{ margin: 0, fontSize: 22, fontWeight: 800, color: C.text }}>FeedBack</h1>
-        <p style={{ margin: "4px 0 0", fontSize: 13, color: C.muted }}>
-          {view === "list" && "Welcome back, Admin!"}
-          {view === "detail" && "Feedback › Feedback details"}
-          {view === "reply" && "Feedback › Feedback Details › Reply to Feedback"}
-        </p>
-      </div>
+    <div className="flex h-screen overflow-hidden antialiased">
+      <Sidebar />
+      <main className="flex-1 overflow-y-auto overflow-x-hidden bg-[#f5f7f9]">
+        <Navbar title="Feedback" breadcrumb={getBreadcrumb()} />
 
-      {view === "list" && (
-        <FeedbackList
-          feedbacks={feedbacks}
-          onView={handleView}
-          onReply={handleReply}
-          onDeleteClick={handleDeleteClick}
-        />
-      )}
-      {view === "detail" && selected && (
-        <FeedbackDetail
-          fb={feedbacks.find((f) => f.id === selected.id) || selected}
-          onBack={handleBack}
-          onReply={handleReply}
-          onDeleteClick={handleDeleteClick}
-        />
-      )}
-      {view === "reply" && selected && (
-        <ReplyView
-          fb={selected}
-          onCancel={() => setView("detail")}
-          onSend={handleSendReply}
-        />
-      )}
+        <div style={{ padding: "28px 36px" }}>
+          {/* Page Header */}
+          <div style={{ marginBottom: 24 }}>
+            <h1 style={{ margin: 0, fontSize: 22, fontWeight: 800, color: C.text }}>Feedback Management</h1>
+            <p style={{ margin: "4px 0 0", fontSize: 13, color: C.muted }}>
+              Review, manage, and respond to library user feedback.
+            </p>
+          </div>
 
-      {deleteTarget && (
-        <DeleteModal
-          feedbackId={deleteTarget.id}
-          onCancel={() => setDeleteTarget(null)}
-          onConfirm={handleDeleteConfirm}
-        />
-      )}
+          {/* View Router */}
+          {view === "list" && (
+            <FeedbackList
+              feedbacks={feedbacks}
+              onView={handleView}
+              onReply={handleReply}
+              onDeleteClick={handleDeleteClick}
+            />
+          )}
+          {view === "detail" && selected && (
+            <FeedbackDetail
+              fb={feedbacks.find((f) => f.id === selected.id) || selected}
+              onReply={handleReply}
+              onDeleteClick={handleDeleteClick}
+            />
+          )}
+          {view === "reply" && selected && (
+            <ReplyView
+              fb={selected}
+              onCancel={() => setView("detail")}
+              onSend={handleSendReply}
+            />
+          )}
+
+          {/* Delete Modal */}
+          {deleteTarget && (
+            <DeleteModal
+              feedbackId={deleteTarget.id}
+              onCancel={() => setDeleteTarget(null)}
+              onConfirm={handleDeleteConfirm}
+            />
+          )}
+        </div>
+      </main>
     </div>
   );
-  return (
-      <div className="flex h-screen overflow-hidden antialiased">
-        <Sidebar />
-        <main className="flex-1 overflow-y-auto overflow-x-hidden bg-[#F8FAFC]">
-          {renderPage()}
-        </main>
-      </div>
-    );
 }

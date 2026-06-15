@@ -155,6 +155,7 @@ function ProgressBar({ joined, max }) {
   );
 }
 
+// ─── InfoChip ───
 function InfoChip({ icon: Icon, label, value }) {
   return (
     <div
@@ -207,8 +208,6 @@ function Btn({ children, variant = "primary", onClick, type = "button", style: e
   );
 }
 
-// ─── Views ───────────────────────────────────────────────────────────────────
-
 /** LIST VIEW */
 function EventList({ events, onView, onEdit, onCreateClick }) {
   const categoryCounts = CATEGORIES.reduce((acc, c) => {
@@ -232,7 +231,7 @@ function EventList({ events, onView, onEdit, onCreateClick }) {
             boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
           }}
         >
-          <div>
+          <div style={{ textAlign: "left" }}>
             <h2 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: colors.textPrimary }}>
               Upcoming Events
             </h2>
@@ -255,6 +254,7 @@ function EventList({ events, onView, onEdit, onCreateClick }) {
               padding: "20px 24px",
               marginBottom: 16,
               boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
+              textAlign: "left",
             }}
           >
             <CategoryBadge category={ev.category} />
@@ -318,12 +318,12 @@ function EventList({ events, onView, onEdit, onCreateClick }) {
             fontSize: 16,
             fontWeight: 700,
             color: colors.textPrimary,
+            textAlign: "left",
           }}
         >
           Event Categories
         </h4>
         {CATEGORIES.map((c) => {
-          const { bg, text } = categoryColor(c);
           return (
             <div
               key={c}
@@ -392,6 +392,7 @@ function EventDetail({ event, onBack, onEdit }) {
             borderRadius: 16,
             padding: "28px 32px",
             boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
+            textAlign: "left",
           }}
         >
           <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20 }}>
@@ -459,7 +460,7 @@ function EventDetail({ event, onBack, onEdit }) {
         </div>
 
         {/* Info sidebar */}
-        <div style={{ width: 280, flexShrink: 0 }}>
+        <div style={{ width: 280, flexShrink: 0, textAlign: "left" }}>
           <InfoChip icon={Calendar} label="Date" value={event.date} />
           <InfoChip icon={Clock} label="Time" value={event.time} />
           <InfoChip icon={MapPin} label="Location" value={event.location} />
@@ -572,7 +573,7 @@ function EventForm({ initial, onSave, onCancel }) {
     display: "block",
   };
 
-  const errStyle = { fontSize: 11, color: "#ef4444", marginTop: 3 };
+  const errStyle = { fontSize: 11, color: "#ef4444", marginTop: 3, textAlign: "left" };
 
   return (
     <div>
@@ -601,7 +602,7 @@ function EventForm({ initial, onSave, onCancel }) {
           </h3>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px 32px" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px 32px", textAlign: "left" }}>
           {/* Event Title */}
           <div>
             <label style={labelStyle}>
@@ -703,7 +704,7 @@ function EventForm({ initial, onSave, onCancel }) {
         </div>
 
         {/* Description full width */}
-        <div style={{ marginTop: 20 }}>
+        <div style={{ marginTop: 20, textAlign: "left" }}>
           <label style={labelStyle}>
             Description <span style={{ color: "#ef4444" }}>*</span>
           </label>
@@ -769,53 +770,58 @@ export default function EventsPage() {
     setSelected(null);
   }
 
+  // Determine dynamic breadcrumb message based on structural sub-view state
+  const getBreadcrumb = () => {
+    if (view === "list") return "Welcome Back!";
+    if (view === "detail") return "Events › Details";
+    if (view === "create") return "Events › Create New Event";
+    if (view === "edit") return "Events › Edit Event Details";
+    return "Welcome Back!";
+  };
+
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        background: colors.bg,
-        padding: "32px 40px",
-        fontFamily: "'Inter', 'Segoe UI', sans-serif",
-        boxSizing: "border-box",
-      }}
-    >
-      {view === "list" && (
-        <EventList
-          events={events}
-          onView={handleView}
-          onEdit={handleEdit}
-          onCreateClick={handleCreate}
-        />
-      )}
-      {view === "detail" && selected && (
-        <EventDetail event={selected} onBack={handleBack} onEdit={handleEdit} />
-      )}
-      {(view === "create" || view === "edit") && (
-        <EventForm
-          initial={
-            view === "edit"
-              ? {
-                  title: selected.title,
-                  date: selected.date,
-                  category: selected.category,
-                  time: selected.time,
-                  maxAttendances: String(selected.maxAttendances),
-                  description: selected.description,
-                }
-              : null
-          }
-          onSave={handleSave}
-          onCancel={handleBack}
-        />
-      )}
+    <div className="flex h-screen overflow-hidden antialiased">
+      {/* 1. Dashboard Layout Sidebar */}
+      <Sidebar />
+
+      {/* 2. Main Workspace Scroll Container Frame */}
+      <main className="flex-1 overflow-y-auto overflow-x-hidden bg-[#F8FAFC]">
+        {/* Dynamic Headed Appbar Navigation Component */}
+        <Navbar title="Events" breadcrumb={getBreadcrumb()} />
+        
+        {/* Central Content Area Padding Wrapper */}
+        <div className="px-8 py-6">
+          {view === "list" && (
+            <EventList
+              events={events}
+              onView={handleView}
+              onEdit={handleEdit}
+              onCreateClick={handleCreate}
+            />
+          )}
+          {view === "detail" && selected && (
+            <EventDetail event={selected} onBack={handleBack} onEdit={handleEdit} />
+          )}
+          {(view === "create" || view === "edit") && (
+            <EventForm
+              initial={
+                view === "edit"
+                  ? {
+                      title: selected.title,
+                      date: selected.date,
+                      category: selected.category,
+                      time: selected.time,
+                      maxAttendances: String(selected.maxAttendances),
+                      description: selected.description,
+                    }
+                  : null
+              }
+              onSave={handleSave}
+              onCancel={handleBack}
+            />
+          )}
+        </div>
+      </main>
     </div>
   );
-  return (
-      <div className="flex h-screen overflow-hidden antialiased">
-        <Sidebar />
-        <main className="flex-1 overflow-y-auto overflow-x-hidden bg-[#F8FAFC]">
-          {renderPage()}
-        </main>
-      </div>
-    );
 }
