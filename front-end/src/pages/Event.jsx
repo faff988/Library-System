@@ -1,35 +1,24 @@
+import { useState, useRef } from "react";
 import Sidebar from "../components/Adminsidebar";
 import Navbar from "../components/Navbar";
-
-import { useState } from "react";
 import {
   Calendar,
   Clock,
   MapPin,
   Users,
   Tag,
-  ArrowLeft,
   Plus,
-  X,
   Sparkles,
+  ChevronDown,
+  Edit2,
+  Eye,
+  ArrowLeft,
+  Check,
+  ImagePlus,
+  X,
 } from "lucide-react";
 
-// ─── Color tokens ───────────────────────────────────────────────────────────
-const colors = {
-  navy: "#1a4a5e",
-  navyDark: "#163d4f",
-  gold: "#e6a817",
-  goldHover: "#cf9510",
-  white: "#ffffff",
-  bg: "#f5f7f9",
-  border: "#e2e8f0",
-  textPrimary: "#1e293b",
-  textSecondary: "#64748b",
-  tagBg: "#e8f4f8",
-  tagText: "#1a4a5e",
-  progressTrack: "#e2e8f0",
-};
-
+// ─── Data ─────────────────────────────────────────────────────────────────────
 const CATEGORIES = ["Discussion", "Special Events", "Children", "Workshop"];
 
 const initialEvents = [
@@ -42,6 +31,7 @@ const initialEvents = [
     location: "Sieamreap Bannalay",
     maxAttendances: 50,
     joined: 30,
+    image: null,
     description:
       "Welcome to the Khmer New Year celebration at Siemreap Bannalay. This traditional festival, also known as Chol Chnam Thmey, marks the end of the harvesting season and the beginning of the new year in the Buddhist calendar.",
     highlights: [
@@ -60,8 +50,8 @@ const initialEvents = [
     location: "Sieamreap Bannalay",
     maxAttendances: 50,
     joined: 30,
-    description:
-      "Join us for an engaging discussion with a local author about their latest work and inspiration.",
+    image: null,
+    description: "Join us for an engaging discussion with a local author about their latest work and inspiration.",
     highlights: [],
   },
   {
@@ -73,6 +63,7 @@ const initialEvents = [
     location: "Sieamreap Bannalay",
     maxAttendances: 30,
     joined: 12,
+    image: null,
     description: "A fun storytime session for children ages 4–10.",
     highlights: [],
   },
@@ -85,42 +76,31 @@ const initialEvents = [
     location: "Sieamreap Bannalay",
     maxAttendances: 20,
     joined: 5,
+    image: null,
     description: "Learn the art of traditional bookbinding in this hands-on workshop.",
     highlights: [],
   },
 ];
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-function categoryColor(cat) {
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+function categoryStyle(cat) {
   const map = {
-    Discussion: { bg: "#dbeafe", text: "#1e40af" },
-    "Special Events": { bg: "#fef3c7", text: "#92400e" },
-    Children: { bg: "#dcfce7", text: "#166534" },
-    Workshop: { bg: "#f3e8ff", text: "#6b21a8" },
+    Discussion: "bg-blue-50 text-blue-700",
+    "Special Events": "bg-yellow-50 text-yellow-800",
+    Children: "bg-green-50 text-green-700",
+    Workshop: "bg-violet-50 text-violet-700",
   };
-  return map[cat] || { bg: colors.tagBg, text: colors.tagText };
+  return map[cat] || "bg-sky-50 text-sky-700";
 }
 
 function pct(joined, max) {
   return Math.round((joined / max) * 100);
 }
 
-// ─── Sub-components ──────────────────────────────────────────────────────────
+// ─── Shared components ────────────────────────────────────────────────────────
 function CategoryBadge({ category }) {
-  const { bg, text } = categoryColor(category);
   return (
-    <span
-      style={{
-        background: bg,
-        color: text,
-        fontSize: 12,
-        fontWeight: 600,
-        padding: "3px 10px",
-        borderRadius: 20,
-        display: "inline-block",
-        marginBottom: 8,
-      }}
-    >
+    <span className={`inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-full ${categoryStyle(category)}`}>
       {category}
     </span>
   );
@@ -129,86 +109,112 @@ function CategoryBadge({ category }) {
 function ProgressBar({ joined, max }) {
   const p = pct(joined, max);
   return (
-    <div style={{ marginTop: 4 }}>
-      <div
-        style={{
-          height: 6,
-          background: colors.progressTrack,
-          borderRadius: 9999,
-          overflow: "hidden",
-        }}
-      >
-        <div
-          style={{
-            width: `${p}%`,
-            height: "100%",
-            background: colors.gold,
-            borderRadius: 9999,
-            transition: "width 0.4s ease",
-          }}
-        />
+    <div className="mt-1">
+      <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+        <div className="h-full rounded-full transition-all" style={{ width: `${p}%`, background: "#E8C110" }} />
       </div>
-      <span style={{ fontSize: 12, color: colors.textSecondary, marginTop: 2, display: "block" }}>
-        {p}% full
-      </span>
+      <span className="text-xs text-gray-400 mt-1 block">{p}% full</span>
     </div>
   );
 }
 
-// ─── InfoChip ───
 function InfoChip({ icon: Icon, label, value }) {
   return (
-    <div
-      style={{
-        background: colors.white,
-        border: `1px solid ${colors.border}`,
-        borderRadius: 12,
-        padding: "14px 18px",
-        display: "flex",
-        alignItems: "center",
-        gap: 12,
-        marginBottom: 12,
-      }}
-    >
-      <Icon size={18} color={colors.navy} />
+    <div className="bg-white border border-dashed border-[#1B4965]/25 rounded-xl p-4 flex items-center gap-3 shadow-sm">
+      <div className="w-10 h-10 rounded-lg bg-[#1B4965]/10 flex items-center justify-center flex-shrink-0">
+        <Icon size={17} color="#1B4965" />
+      </div>
       <div>
-        <div style={{ fontSize: 11, color: colors.textSecondary, fontWeight: 500 }}>{label}</div>
-        <div style={{ fontSize: 15, fontWeight: 600, color: colors.textPrimary }}>{value}</div>
+        <div className="text-xs font-bold uppercase tracking-wider text-gray-400">{label}</div>
+        <div className="text-sm font-bold text-gray-800 mt-0.5">{value}</div>
       </div>
     </div>
   );
 }
 
-function Btn({ children, variant = "primary", onClick, type = "button", style: extra = {} }) {
-  const base = {
-    border: "none",
-    borderRadius: 10,
-    padding: "10px 22px",
-    fontWeight: 600,
-    fontSize: 14,
-    cursor: "pointer",
-    transition: "opacity 0.15s",
-    ...extra,
-  };
-  const styles = {
-    primary: { background: colors.navy, color: colors.white },
-    gold: { background: colors.gold, color: colors.white },
-    outline: { background: "transparent", border: `1.5px solid ${colors.navy}`, color: colors.navy },
-  };
+// ─── Image Upload Field ───────────────────────────────────────────────────────
+function ImageUpload({ value, onChange }) {
+  const inputRef = useRef(null);
+
+  function handleFile(file) {
+    if (!file || !file.type.startsWith("image/")) return;
+    const reader = new FileReader();
+    reader.onload = (e) => onChange(e.target.result);
+    reader.readAsDataURL(file);
+  }
+
+  function handleDrop(e) {
+    e.preventDefault();
+    handleFile(e.dataTransfer.files[0]);
+  }
+
   return (
-    <button
-      type={type}
-      onClick={onClick}
-      style={{ ...base, ...styles[variant] }}
-      onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.85")}
-      onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
-    >
-      {children}
-    </button>
+    <div>
+      <label className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-1.5 block">
+        Event Image
+      </label>
+      {value ? (
+        <div className="relative rounded-xl overflow-hidden border border-gray-200" style={{ height: 160 }}>
+          <img src={value} alt="Event" className="w-full h-full object-cover" />
+          <button
+            onClick={() => onChange(null)}
+            className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/50 flex items-center justify-center text-white hover:bg-black/70 transition"
+          >
+            <X size={14} />
+          </button>
+        </div>
+      ) : (
+        <div
+          onClick={() => inputRef.current.click()}
+          onDrop={handleDrop}
+          onDragOver={(e) => e.preventDefault()}
+          className="border-2 border-dashed border-[#1B4965]/30 rounded-xl flex flex-col items-center justify-center gap-2 cursor-pointer hover:border-[#1B4965]/60 hover:bg-blue-50/30 transition"
+          style={{ height: 160 }}
+        >
+          <div className="w-10 h-10 rounded-xl bg-[#1B4965]/10 flex items-center justify-center">
+            <ImagePlus size={20} color="#1B4965" />
+          </div>
+          <p className="text-xs font-bold text-[#1B4965]">Click or drag to upload</p>
+          <p className="text-xs text-gray-400">PNG, JPG, WEBP</p>
+        </div>
+      )}
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(e) => handleFile(e.target.files[0])}
+      />
+    </div>
   );
 }
 
-/** LIST VIEW */
+// ─── Event Image Placeholder ──────────────────────────────────────────────────
+// Shown in list cards and detail when no image has been uploaded yet
+function EventImagePlaceholder({ category, height = "h-40" }) {
+  const gradients = {
+    Discussion: "from-blue-100 to-blue-200",
+    "Special Events": "from-yellow-100 to-yellow-200",
+    Children: "from-green-100 to-green-200",
+    Workshop: "from-violet-100 to-violet-200",
+  };
+  const icons = {
+    Discussion: "💬",
+    "Special Events": "🎉",
+    Children: "🧒",
+    Workshop: "🛠️",
+  };
+  const grad = gradients[category] || "from-gray-100 to-gray-200";
+  const icon = icons[category] || "📌";
+  return (
+    <div className={`w-full ${height} bg-gradient-to-br ${grad} flex flex-col items-center justify-center gap-2`}>
+      <span style={{ fontSize: 36 }}>{icon}</span>
+      <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">{category}</span>
+    </div>
+  );
+}
+
+// ─── LIST VIEW ────────────────────────────────────────────────────────────────
 function EventList({ events, onView, onEdit, onCreateClick }) {
   const categoryCounts = CATEGORIES.reduce((acc, c) => {
     acc[c] = events.filter((e) => e.category === c).length;
@@ -216,298 +222,165 @@ function EventList({ events, onView, onEdit, onCreateClick }) {
   }, {});
 
   return (
-    <div style={{ display: "flex", gap: 24, alignItems: "flex-start" }}>
-      {/* Event cards */}
-      <div style={{ flex: 1 }}>
-        <div
-          style={{
-            background: colors.white,
-            borderRadius: 16,
-            padding: "24px 28px",
-            marginBottom: 24,
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
-          }}
-        >
-          <div style={{ textAlign: "left" }}>
-            <h2 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: colors.textPrimary }}>
-              Upcoming Events
-            </h2>
-            <p style={{ margin: "4px 0 0", fontSize: 14, color: colors.textSecondary }}>
-              Manage and organize library events
-            </p>
-          </div>
-          <Btn variant="gold" onClick={onCreateClick}>
-            <Plus size={15} style={{ marginRight: 6, verticalAlign: "middle" }} />
-            Create Event
-          </Btn>
-        </div>
+    // Outer wrapper: full viewport height minus navbar, overflow hidden so
+    // only the event cards column scrolls independently.
+    <div className="flex gap-5 items-start" style={{ height: "calc(100vh - 130px)" }}>
 
+      {/* ── Scrollable main column ── */}
+      <div className="flex-1 overflow-y-auto pr-1" style={{ height: "100%" }}>
+        {/* Event cards */}
         {events.map((ev) => (
-          <div
-            key={ev.id}
-            style={{
-              background: colors.white,
-              borderRadius: 16,
-              padding: "20px 24px",
-              marginBottom: 16,
-              boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
-              textAlign: "left",
-            }}
-          >
-            <CategoryBadge category={ev.category} />
-            <h3 style={{ margin: "0 0 12px", fontSize: 20, fontWeight: 700, color: colors.navy }}>
-              {ev.title}
-            </h3>
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "1fr 1fr",
-                gap: "6px 0",
-                fontSize: 14,
-                color: colors.textSecondary,
-                marginBottom: 10,
-              }}
-            >
-              <span>
-                <Calendar size={13} style={{ marginRight: 5, verticalAlign: "middle" }} />
-                {ev.date}
-              </span>
-              <span>
-                <Clock size={13} style={{ marginRight: 5, verticalAlign: "middle" }} />
-                {ev.time}
-              </span>
-              <span>
-                <MapPin size={13} style={{ marginRight: 5, verticalAlign: "middle" }} />
-                {ev.location}
-              </span>
-              <span>
-                <Users size={13} style={{ marginRight: 5, verticalAlign: "middle" }} />
-                {ev.joined}/{ev.maxAttendances} joined
-              </span>
-            </div>
-            <ProgressBar joined={ev.joined} max={ev.maxAttendances} />
-            <div style={{ display: "flex", gap: 12, marginTop: 16 }}>
-              <Btn variant="outline" onClick={() => onEdit(ev)}>
-                Edit
-              </Btn>
-              <Btn variant="primary" onClick={() => onView(ev)}>
-                View Detail
-              </Btn>
+          <div key={ev.id} className="bg-white rounded-xl border border-dashed border-[#1B4965]/25 shadow-sm mb-4 overflow-hidden">
+            {/* Image / placeholder */}
+            {ev.image ? (
+              <div className="w-full h-40 overflow-hidden">
+                <img src={ev.image} alt={ev.title} className="w-full h-full object-cover" />
+              </div>
+            ) : (
+              <EventImagePlaceholder category={ev.category} height="h-40" />
+            )}
+
+            <div className="p-5">
+              <div className="flex items-start justify-between mb-3">
+                <div>
+                  <CategoryBadge category={ev.category} />
+                  <h3 className="text-lg font-bold text-[#1B4965] mt-2">{ev.title}</h3>
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0 ml-3">
+                  <button
+                    onClick={() => onEdit(ev)}
+                    className="flex items-center gap-1.5 text-xs font-bold text-[#1B4965] border border-[#1B4965]/30 px-3 py-1.5 rounded-lg hover:bg-blue-50 transition"
+                  >
+                    <Edit2 size={12} /> Edit
+                  </button>
+                  <button
+                    onClick={() => onView(ev)}
+                    className="flex items-center gap-1.5 text-xs font-bold text-white px-3 py-1.5 rounded-lg hover:opacity-90 transition"
+                    style={{ background: "#1B4965" }}
+                  >
+                    <Eye size={12} /> View Detail
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-y-1.5 text-sm text-gray-500 mb-3">
+                <span className="flex items-center gap-1.5"><Calendar size={13} className="text-gray-400" />{ev.date}</span>
+                <span className="flex items-center gap-1.5"><Clock size={13} className="text-gray-400" />{ev.time}</span>
+                <span className="flex items-center gap-1.5"><MapPin size={13} className="text-gray-400" />{ev.location}</span>
+                <span className="flex items-center gap-1.5"><Users size={13} className="text-gray-400" />{ev.joined}/{ev.maxAttendances} joined</span>
+              </div>
+
+              <ProgressBar joined={ev.joined} max={ev.maxAttendances} />
             </div>
           </div>
         ))}
       </div>
 
-      {/* Sidebar categories */}
-      <div
-        style={{
-          width: 240,
-          background: colors.white,
-          borderRadius: 16,
-          padding: "20px 20px",
-          boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
-          flexShrink: 0,
-        }}
-      >
-        <h4
-          style={{
-            margin: "0 0 16px",
-            fontSize: 16,
-            fontWeight: 700,
-            color: colors.textPrimary,
-            textAlign: "left",
-          }}
+      {/* ── Sticky sidebar (never scrolls) ── */}
+      <div className="w-56 flex-shrink-0 flex flex-col gap-4" style={{ position: "sticky", top: 0, height: "fit-content" }}>
+        {/* Create Event button */}
+        <button
+          onClick={onCreateClick}
+          className="w-full flex items-center justify-center gap-2 text-sm font-bold px-4 py-3 rounded-xl transition shadow-sm"
+          style={{ backgroundColor: "#E8C110", color: "#1B4965" }}
         >
-          Event Categories
-        </h4>
-        {CATEGORIES.map((c) => {
-          return (
-            <div
-              key={c}
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                marginBottom: 12,
-                fontSize: 14,
-                color: colors.textSecondary,
-              }}
-            >
-              <span>{c}</span>
+          <Plus size={16} /> Create Event
+        </button>
+
+        {/* Categories panel */}
+        <div className="bg-[#1B4965] rounded-xl p-5 shadow-sm">
+          <p className="text-xs font-bold uppercase tracking-wider text-white/60 mb-4">Event Categories</p>
+          {CATEGORIES.map((c) => (
+            <div key={c} className="flex items-center justify-between mb-3 last:mb-0">
+              <span className="text-sm text-white/80 font-medium">{c}</span>
               <span
-                style={{
-                  background: colors.navy,
-                  color: colors.white,
-                  borderRadius: 9999,
-                  width: 24,
-                  height: 24,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  fontSize: 12,
-                  fontWeight: 600,
-                }}
+                className="text-xs font-bold px-2 py-0.5 rounded-full"
+                style={{ background: "#E8C110", color: "#1B4965" }}
               >
                 {categoryCounts[c]}
               </span>
             </div>
-          );
-        })}
+          ))}
+        </div>
       </div>
     </div>
   );
 }
 
-/** DETAIL VIEW */
+// ─── DETAIL VIEW ──────────────────────────────────────────────────────────────
 function EventDetail({ event, onBack, onEdit }) {
   const p = pct(event.joined, event.maxAttendances);
   return (
     <div>
-      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 24 }}>
+      {/* Action bar */}
+      <div className="flex items-center justify-between bg-white border border-gray-100 rounded-xl px-6 py-4 mb-5 shadow-sm">
+        <div className="flex items-center gap-3">
+          <button onClick={onBack} className="flex items-center gap-1.5 text-sm font-bold text-gray-500 hover:text-gray-700 transition">
+            <ArrowLeft size={16} /> Back
+          </button>
+          <span className="text-gray-200">|</span>
+          <CategoryBadge category={event.category} />
+          <span className="text-sm font-bold text-[#1B4965]">{event.title}</span>
+        </div>
         <button
-          onClick={onBack}
-          style={{
-            background: "none",
-            border: "none",
-            cursor: "pointer",
-            display: "flex",
-            alignItems: "center",
-            color: colors.textPrimary,
-          }}
+          onClick={() => onEdit(event)}
+          className="flex items-center gap-1.5 text-sm font-bold text-[#1B4965] border border-[#1B4965]/30 px-3 py-2 rounded-lg hover:bg-blue-50 transition"
         >
-          <ArrowLeft size={20} />
+          <Edit2 size={13} /> Edit Details
         </button>
-        <h2 style={{ margin: 0, fontSize: 22, fontWeight: 700 }}>Event Detail</h2>
       </div>
 
-      <div style={{ display: "flex", gap: 24, alignItems: "flex-start" }}>
+      <div className="flex gap-5 items-start">
         {/* Main content */}
-        <div
-          style={{
-            flex: 1,
-            background: colors.white,
-            borderRadius: 16,
-            padding: "28px 32px",
-            boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
-            textAlign: "left",
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20 }}>
-            <Tag size={20} color={colors.navy} />
-            <h2 style={{ margin: 0, fontSize: 24, fontWeight: 700, color: colors.textPrimary }}>
-              {event.title}
-            </h2>
-          </div>
-
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              borderBottom: `1px solid ${colors.border}`,
-              paddingBottom: 12,
-              marginBottom: 16,
-            }}
-          >
-            <span style={{ fontWeight: 600, fontSize: 15 }}>About this Event</span>
-            <button
-              onClick={() => onEdit(event)}
-              style={{
-                background: "none",
-                border: "none",
-                color: colors.navy,
-                cursor: "pointer",
-                fontWeight: 600,
-                fontSize: 14,
-              }}
-            >
-              Edit Details
-            </button>
-          </div>
-
-          <p style={{ fontSize: 14, lineHeight: 1.7, color: colors.textSecondary, marginBottom: 20 }}>
-            {event.description}
-          </p>
-
-          {event.highlights.length > 0 && (
-            <>
-              <p style={{ fontWeight: 600, marginBottom: 12, fontSize: 14 }}>Highlights</p>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                {event.highlights.map((h, i) => (
-                  <div
-                    key={i}
-                    style={{
-                      border: `1px solid ${colors.border}`,
-                      borderRadius: 12,
-                      padding: "12px 16px",
-                      fontSize: 13,
-                      color: colors.textPrimary,
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 8,
-                    }}
-                  >
-                    <Sparkles size={14} color={colors.gold} />
-                    {h}
-                  </div>
-                ))}
-              </div>
-            </>
+        <div className="flex-1 bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+          {/* Image / placeholder hero */}
+          {event.image ? (
+            <div className="w-full h-56 overflow-hidden">
+              <img src={event.image} alt={event.title} className="w-full h-full object-cover" />
+            </div>
+          ) : (
+            <EventImagePlaceholder category={event.category} height="h-56" />
           )}
+
+          <div className="bg-[#1B4965] px-6 py-4 flex items-center gap-2">
+            <Tag size={16} className="text-[#E8C110]" />
+            <span className="text-white font-bold text-sm">Event Details</span>
+          </div>
+          <div className="p-6">
+            <h2 className="text-xl font-bold text-[#1B4965] mb-4">{event.title}</h2>
+            <p className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-2">About this Event</p>
+            <p className="text-sm text-gray-600 leading-relaxed mb-5">{event.description}</p>
+            {event.highlights.length > 0 && (
+              <>
+                <p className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-3">Highlights</p>
+                <div className="grid grid-cols-2 gap-3">
+                  {event.highlights.map((h, i) => (
+                    <div key={i} className="border border-dashed border-[#1B4965]/25 rounded-xl px-4 py-3 text-sm text-gray-700 flex items-center gap-2">
+                      <Sparkles size={13} style={{ color: "#E8C110", flexShrink: 0 }} />
+                      {h}
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
         </div>
 
-        {/* Info sidebar */}
-        <div style={{ width: 280, flexShrink: 0, textAlign: "left" }}>
+        {/* Info sidebar — sticky */}
+        <div className="w-64 flex-shrink-0 flex flex-col gap-3" style={{ position: "sticky", top: 0 }}>
           <InfoChip icon={Calendar} label="Date" value={event.date} />
           <InfoChip icon={Clock} label="Time" value={event.time} />
           <InfoChip icon={MapPin} label="Location" value={event.location} />
-
-          <div
-            style={{
-              background: colors.white,
-              border: `1px solid ${colors.border}`,
-              borderRadius: 12,
-              padding: "16px 18px",
-              boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
-            }}
-          >
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                marginBottom: 10,
-              }}
-            >
-              <span style={{ fontWeight: 700, fontSize: 15 }}>Attendance</span>
-              <span style={{ color: colors.gold, fontWeight: 600, fontSize: 13 }}>
-                {event.joined}/{event.maxAttendances} joined
-              </span>
+          <div className="bg-[#1B4965] rounded-xl p-5 shadow-sm">
+            <p className="text-xs font-bold uppercase tracking-wider text-white/60 mb-1">Attendance</p>
+            <p className="text-2xl font-bold text-white">
+              {event.joined}
+              <span className="text-sm text-white/60 font-medium">/{event.maxAttendances}</span>
+            </p>
+            <div className="h-1.5 bg-white/20 rounded-full overflow-hidden my-2">
+              <div className="h-full rounded-full" style={{ width: `${p}%`, background: "#E8C110" }} />
             </div>
-            <div
-              style={{
-                height: 8,
-                background: colors.progressTrack,
-                borderRadius: 9999,
-                overflow: "hidden",
-                marginBottom: 6,
-              }}
-            >
-              <div
-                style={{
-                  width: `${p}%`,
-                  height: "100%",
-                  background: colors.gold,
-                  borderRadius: 9999,
-                }}
-              />
-            </div>
-            <span style={{ fontSize: 12, color: colors.textSecondary }}>
-              {p}% of capacity reached
-            </span>
+            <p className="text-xs text-white/60">{p}% of capacity reached</p>
           </div>
         </div>
       </div>
@@ -515,18 +388,11 @@ function EventDetail({ event, onBack, onEdit }) {
   );
 }
 
-/** FORM VIEW (Create / Edit) */
+// ─── FORM VIEW ────────────────────────────────────────────────────────────────
 function EventForm({ initial, onSave, onCancel }) {
   const isEdit = !!initial;
   const [form, setForm] = useState(
-    initial || {
-      title: "",
-      date: "",
-      category: "",
-      time: "",
-      maxAttendances: "",
-      description: "",
-    }
+    initial || { title: "", date: "", category: "", time: "", maxAttendances: "", description: "", image: null }
   );
   const [errors, setErrors] = useState({});
 
@@ -552,182 +418,130 @@ function EventForm({ initial, onSave, onCancel }) {
     onSave(form);
   }
 
-  const inputStyle = (hasErr) => ({
-    width: "100%",
-    padding: "12px 14px",
-    borderRadius: 10,
-    border: `1.5px solid ${hasErr ? "#ef4444" : colors.border}`,
-    fontSize: 14,
-    color: colors.textPrimary,
-    outline: "none",
-    boxSizing: "border-box",
-    background: colors.white,
-    fontFamily: "inherit",
-  });
+  const inputCls = (err) =>
+    `w-full border ${err ? "border-red-400" : "border-gray-200"} rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#1B4965] transition`;
 
-  const labelStyle = {
-    fontSize: 13,
-    fontWeight: 600,
-    color: colors.textPrimary,
-    marginBottom: 6,
-    display: "block",
-  };
-
-  const errStyle = { fontSize: 11, color: "#ef4444", marginTop: 3, textAlign: "left" };
+  const labelCls = "text-xs font-bold uppercase tracking-wider text-gray-400 mb-1.5 block";
 
   return (
-    <div>
-      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 24 }}>
-        <button
-          onClick={onCancel}
-          style={{ background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", color: colors.textPrimary }}
-        >
-          <ArrowLeft size={20} />
-        </button>
-        <h2 style={{ margin: 0, fontSize: 22, fontWeight: 700 }}>{isEdit ? "Edit Event" : "Create Event"}</h2>
+    // Same height trick as list view so sidebar stays fixed
+    <div className="flex gap-5 items-start" style={{ height: "calc(100vh - 180px)" }}>
+
+      {/* ── Scrollable main form ── */}
+      <div className="flex-1 overflow-y-auto pr-1" style={{ height: "100%" }}>
+        {/* Action bar */}
+        <div className="flex items-center justify-between bg-white border border-gray-100 rounded-xl px-6 py-4 mb-5 shadow-sm">
+          <div className="flex items-center gap-3">
+            <button onClick={onCancel} className="flex items-center gap-1.5 text-sm font-bold text-gray-500 hover:text-gray-700 transition">
+              <ArrowLeft size={16} /> Back
+            </button>
+            <span className="text-gray-200">|</span>
+            <span className="text-sm font-bold text-[#1B4965]">{isEdit ? "Edit Event" : "Create New Event"}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button onClick={onCancel} className="text-sm font-bold text-gray-500 border border-gray-200 px-4 py-2 rounded-lg hover:bg-gray-50 transition">
+              Cancel
+            </button>
+            <button
+              onClick={handleSubmit}
+              className="flex items-center gap-2 text-sm font-bold px-5 py-2 rounded-lg transition shadow-sm"
+              style={{ background: "#1B4965", color: "#fff" }}
+            >
+              <Check size={14} /> {isEdit ? "Save Changes" : "Save Event"}
+            </button>
+          </div>
+        </div>
+
+        {/* Form card */}
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+          <div className="bg-[#1B4965] px-6 py-4 flex items-center gap-2">
+            <Tag size={16} className="text-[#E8C110]" />
+            <span className="text-white font-bold text-sm">Basic Information</span>
+          </div>
+          <div className="p-6">
+            <div className="grid grid-cols-2 gap-x-8 gap-y-5 mb-5">
+              <div>
+                <label className={labelCls}>Event Title <span className="text-red-400">*</span></label>
+                <input className={inputCls(errors.title)} value={form.title} onChange={(e) => set("title", e.target.value)} placeholder="e.g. Khmer New Year" />
+                {errors.title && <p className="text-xs text-red-400 mt-1">{errors.title}</p>}
+              </div>
+              <div>
+                <label className={labelCls}>Date <span className="text-red-400">*</span></label>
+                <input className={inputCls(errors.date)} value={form.date} onChange={(e) => set("date", e.target.value)} placeholder="DD-MM-YYYY" />
+                {errors.date && <p className="text-xs text-red-400 mt-1">{errors.date}</p>}
+              </div>
+              <div>
+                <label className={labelCls}>Category <span className="text-red-400">*</span></label>
+                <div className="relative">
+                  <select className={`${inputCls(errors.category)} appearance-none pr-8`} value={form.category} onChange={(e) => set("category", e.target.value)}>
+                    <option value="">Select category</option>
+                    {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                  <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                </div>
+                {errors.category && <p className="text-xs text-red-400 mt-1">{errors.category}</p>}
+              </div>
+              <div>
+                <label className={labelCls}>Time <span className="text-red-400">*</span></label>
+                <input className={inputCls(errors.time)} value={form.time} onChange={(e) => set("time", e.target.value)} placeholder="e.g. 9:00 AM" />
+                {errors.time && <p className="text-xs text-red-400 mt-1">{errors.time}</p>}
+              </div>
+              <div>
+                <label className={labelCls}>Max Attendances <span className="text-red-400">*</span></label>
+                <input type="number" className={inputCls(errors.maxAttendances)} value={form.maxAttendances} onChange={(e) => set("maxAttendances", e.target.value)} placeholder="e.g. 50" />
+                {errors.maxAttendances && <p className="text-xs text-red-400 mt-1">{errors.maxAttendances}</p>}
+              </div>
+            </div>
+            <div>
+              <label className={labelCls}>Description <span className="text-red-400">*</span></label>
+              <textarea
+                rows={5}
+                className={`${inputCls(errors.description)} resize-none leading-relaxed`}
+                value={form.description}
+                onChange={(e) => set("description", e.target.value)}
+                placeholder="Describe the event…"
+              />
+              {errors.description && <p className="text-xs text-red-400 mt-1">{errors.description}</p>}
+            </div>
+          </div>
+        </div>
       </div>
 
-      <div
-        style={{
-          background: colors.white,
-          borderRadius: 16,
-          padding: "32px 36px",
-          boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
-        }}
-      >
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 28 }}>
-          <Tag size={20} color={colors.navy} />
-          <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: colors.navy }}>
-            Basic Information
-          </h3>
+      {/* ── Sticky right sidebar ── */}
+      <div className="w-56 flex-shrink-0 flex flex-col gap-4" style={{ position: "sticky", top: 0, height: "fit-content" }}>
+        {/* Categories — also acts as selector */}
+        <div className="bg-[#1B4965] rounded-xl p-5 shadow-sm">
+          <p className="text-xs font-bold uppercase tracking-wider text-white/60 mb-4">Event Categories</p>
+          {CATEGORIES.map((c) => (
+            <button
+              key={c}
+              onClick={() => set("category", c)}
+              className={`w-full flex items-center justify-between mb-2 last:mb-0 px-3 py-2 rounded-lg text-sm font-medium transition ${
+                form.category === c
+                  ? "font-bold"
+                  : "text-white/80 hover:bg-white/10"
+              }`}
+              style={form.category === c ? { background: "#E8C110", color: "#1B4965" } : {}}
+            >
+              <span>{c}</span>
+              {form.category === c && <Check size={13} />}
+            </button>
+          ))}
+          {errors.category && <p className="text-xs text-red-300 mt-2">{errors.category}</p>}
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px 32px", textAlign: "left" }}>
-          {/* Event Title */}
-          <div>
-            <label style={labelStyle}>
-              Event Title <span style={{ color: "#ef4444" }}>*</span>
-            </label>
-            <input
-              style={inputStyle(errors.title)}
-              value={form.title}
-              onChange={(e) => set("title", e.target.value)}
-              placeholder="e.g. Khmer New Year"
-            />
-            {errors.title && <p style={errStyle}>{errors.title}</p>}
-          </div>
-
-          {/* Date */}
-          <div>
-            <label style={labelStyle}>
-              Date <span style={{ color: "#ef4444" }}>*</span>
-            </label>
-            <input
-              style={inputStyle(errors.date)}
-              value={form.date}
-              onChange={(e) => set("date", e.target.value)}
-              placeholder="DD-MM-YYYY"
-            />
-            {errors.date && <p style={errStyle}>{errors.date}</p>}
-          </div>
-
-          {/* Categories */}
-          <div>
-            <label style={labelStyle}>
-              Categories <span style={{ color: "#ef4444" }}>*</span>
-            </label>
-            <div style={{ position: "relative" }}>
-              <select
-                style={{ ...inputStyle(errors.category), appearance: "none", paddingRight: 36 }}
-                value={form.category}
-                onChange={(e) => set("category", e.target.value)}
-              >
-                <option value="">Select category</option>
-                {CATEGORIES.map((c) => (
-                  <option key={c} value={c}>{c}</option>
-                ))}
-              </select>
-              <span
-                style={{
-                  position: "absolute",
-                  right: 14,
-                  top: "50%",
-                  transform: "translateY(-50%)",
-                  pointerEvents: "none",
-                  color: colors.textSecondary,
-                }}
-              >
-                ▾
-              </span>
-            </div>
-            {errors.category && <p style={errStyle}>{errors.category}</p>}
-          </div>
-
-          {/* Time */}
-          <div>
-            <label style={labelStyle}>
-              Time <span style={{ color: "#ef4444" }}>*</span>
-            </label>
-            <input
-              style={inputStyle(errors.time)}
-              value={form.time}
-              onChange={(e) => set("time", e.target.value)}
-              placeholder="e.g. 9:00 AM"
-            />
-            {errors.time && <p style={errStyle}>{errors.time}</p>}
-          </div>
-
-          {/* Max Attendances */}
-          <div>
-            <label style={labelStyle}>
-              Max Attendances <span style={{ color: "#ef4444" }}>*</span>
-            </label>
-            <input
-              style={inputStyle(errors.maxAttendances)}
-              type="number"
-              value={form.maxAttendances}
-              onChange={(e) => set("maxAttendances", e.target.value)}
-              placeholder="e.g. 50"
-            />
-            {errors.maxAttendances && <p style={errStyle}>{errors.maxAttendances}</p>}
-          </div>
-
-          {/* Action buttons placed in grid */}
-          <div style={{ display: "flex", gap: 12, alignItems: "flex-end", paddingBottom: 2 }}>
-            <Btn variant="primary" onClick={onCancel}>
-              Cancel
-            </Btn>
-            <Btn variant="gold" onClick={handleSubmit}>
-              {isEdit ? "Save change" : "Save"}
-            </Btn>
-          </div>
-        </div>
-
-        {/* Description full width */}
-        <div style={{ marginTop: 20, textAlign: "left" }}>
-          <label style={labelStyle}>
-            Description <span style={{ color: "#ef4444" }}>*</span>
-          </label>
-          <textarea
-            style={{
-              ...inputStyle(errors.description),
-              height: 160,
-              resize: "vertical",
-            }}
-            value={form.description}
-            onChange={(e) => set("description", e.target.value)}
-            placeholder="Describe the event…"
-          />
-          {errors.description && <p style={errStyle}>{errors.description}</p>}
+        {/* Image upload */}
+        <div className="bg-white rounded-xl border border-dashed border-[#1B4965]/25 shadow-sm p-4">
+          <ImageUpload value={form.image} onChange={(v) => set("image", v)} />
         </div>
       </div>
     </div>
   );
 }
 
-// ─── Root component ──────────────────────────────────────────────────────────
+// ─── ROOT ─────────────────────────────────────────────────────────────────────
 export default function EventsPage() {
-  const [view, setView] = useState("list"); // "list" | "detail" | "create" | "edit"
+  const [view, setView] = useState("list");
   const [events, setEvents] = useState(initialEvents);
   const [selected, setSelected] = useState(null);
 
@@ -741,36 +555,20 @@ export default function EventsPage() {
       setEvents((evs) =>
         evs.map((e) =>
           e.id === selected.id
-            ? {
-                ...e,
-                title: form.title,
-                date: form.date,
-                category: form.category,
-                time: form.time,
-                maxAttendances: Number(form.maxAttendances),
-                description: form.description,
-              }
+            ? { ...e, title: form.title, date: form.date, category: form.category, time: form.time, maxAttendances: Number(form.maxAttendances), description: form.description, image: form.image }
             : e
         )
       );
     } else {
       setEvents((evs) => [
         ...evs,
-        {
-          id: Date.now(),
-          ...form,
-          maxAttendances: Number(form.maxAttendances),
-          joined: 0,
-          location: "Sieamreap Bannalay",
-          highlights: [],
-        },
+        { id: Date.now(), ...form, maxAttendances: Number(form.maxAttendances), joined: 0, location: "Sieamreap Bannalay", highlights: [] },
       ]);
     }
     setView("list");
     setSelected(null);
   }
 
-  // Determine dynamic breadcrumb message based on structural sub-view state
   const getBreadcrumb = () => {
     if (view === "list") return "Welcome Back!";
     if (view === "detail") return "Events › Details";
@@ -781,23 +579,14 @@ export default function EventsPage() {
 
   return (
     <div className="flex h-screen overflow-hidden antialiased">
-      {/* 1. Dashboard Layout Sidebar */}
       <Sidebar />
-
-      {/* 2. Main Workspace Scroll Container Frame */}
       <main className="flex-1 overflow-y-auto overflow-x-hidden bg-[#F8FAFC]">
-        {/* Dynamic Headed Appbar Navigation Component */}
         <Navbar title="Events" breadcrumb={getBreadcrumb()} />
-        
-        {/* Central Content Area Padding Wrapper */}
         <div className="px-8 py-6">
+          
+
           {view === "list" && (
-            <EventList
-              events={events}
-              onView={handleView}
-              onEdit={handleEdit}
-              onCreateClick={handleCreate}
-            />
+            <EventList events={events} onView={handleView} onEdit={handleEdit} onCreateClick={handleCreate} />
           )}
           {view === "detail" && selected && (
             <EventDetail event={selected} onBack={handleBack} onEdit={handleEdit} />
@@ -806,14 +595,7 @@ export default function EventsPage() {
             <EventForm
               initial={
                 view === "edit"
-                  ? {
-                      title: selected.title,
-                      date: selected.date,
-                      category: selected.category,
-                      time: selected.time,
-                      maxAttendances: String(selected.maxAttendances),
-                      description: selected.description,
-                    }
+                  ? { title: selected.title, date: selected.date, category: selected.category, time: selected.time, maxAttendances: String(selected.maxAttendances), description: selected.description, image: selected.image || null }
                   : null
               }
               onSave={handleSave}
