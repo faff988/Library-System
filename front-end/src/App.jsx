@@ -6,6 +6,7 @@ import Donations from "./pages/Donations";
 import Inventory from "./pages/Inventory";
 import AddBook from "./pages/AddBook";
 import BookDetails from "./pages/BookDetails";
+import EditBook from "./pages/EditBook";
 import Event from "./pages/Event";
 import BorrowReturn from "./pages/Borrow-Return";
 import Reports from "./pages/Reports";
@@ -27,6 +28,7 @@ export default function App() {
       <Route path="/inventory" element={<Inventory />} />
       <Route path="/inventory/add" element={<AddBook />} />
       <Route path="/inventory/:id" element={<BookDetails />} />
+      <Route path="/inventory/:id/edit" element={<EditBook />} />
       <Route path="/event" element={<Event />} />
       <Route path="/borrow-return" element={<BorrowReturn />} />
       <Route path="/reports" element={<Reports />} />

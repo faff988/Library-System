@@ -5,31 +5,32 @@ import Sidebar from "../components/Adminsidebar";
 import Navbar from "../components/Navbar";
 
 const BOOKS = [
-  { id: "001", code: "LIB-CHD-001", title: "The Little Prince", author: "Antoine de Saint-Exupéry", category: "Children", available: 8, totalCopies: 12, status: "AVAILABLE" },
-  { id: "002", code: "LIB-HIS-002", title: "Khmer History Vol.1", author: "Chheng Phon", category: "History", available: 0, totalCopies: 5, status: "BORROWED" },
-  { id: "003", code: "LIB-SCI-003", title: "Science for Kids", author: "Dr. Sophea Mao", category: "Science", available: 10, totalCopies: 10, status: "AVAILABLE" },
-  { id: "004", code: "LIB-REL-004", title: "Buddhism & Modern Life", author: "Ven. Sithan", category: "Religion", available: 3, totalCopies: 6, status: "AVAILABLE" },
-  { id: "005", code: "LIB-HIS-005", title: "Angkor Wat Architecture", author: "Kim Seng", category: "History", available: 2, totalCopies: 4, status: "LOW STOCK" },
-  { id: "006", code: "LIB-FIC-006", title: "Cambodian Folk Tales", author: "Ly Theam Teng", category: "Fiction", available: 7, totalCopies: 8, status: "AVAILABLE" },
-  { id: "007", code: "LIB-SCI-007", title: "Mathematics Grade 9", author: "MoEYS", category: "Science", available: 15, totalCopies: 15, status: "AVAILABLE" },
-  { id: "008", code: "LIB-NF-008", title: "English for Beginners", author: "Sokha Vann", category: "Non-Fiction", available: 0, totalCopies: 6, status: "OUT OF STOCK" },
+  { id: "1", code: "LIB-CHD-001", title: "The Little Prince", author: "Antoine de Saint-Exupéry", category: "Children", available: 8, totalCopies: 12, status: "AVAILABLE" },
+  { id: "2", code: "LIB-HIS-002", title: "Khmer History Vol.1", author: "Chheng Phon", category: "History", available: 5, totalCopies: 5, status: "BORROWED" },
+  { id: "3", code: "LIB-SCI-003", title: "Science for Kids", author: "Dr. Sophea Mao", category: "Science", available: 10, totalCopies: 10, status: "AVAILABLE" },
+  { id: "4", code: "LIB-REL-004", title: "Buddhism & Modern Life", author: "Ven. Sithan", category: "Religion", available: 3, totalCopies: 6, status: "AVAILABLE" },
+  { id: "5", code: "LIB-HIS-005", title: "Angkor Wat Architecture", author: "Kim Seng", category: "History", available: 2, totalCopies: 4, status: "LOW STOCK" },
+  { id: "6", code: "LIB-FIC-006", title: "Cambodian Folk Tales", author: "Ly Theam Teng", category: "Fiction", available: 7, totalCopies: 8, status: "AVAILABLE" },
+  { id: "7", code: "LIB-SCI-007", title: "Mathematics Grade 9", author: "MoEYS", category: "Science", available: 15, totalCopies: 15, status: "AVAILABLE" },
+  { id: "8", code: "LIB-NF-008", title: "English for Beginners", author: "Sokha Vann", category: "Non-Fiction", available: 0, totalCopies: 6, status: "OUT OF STOCK" },
 ];
 
 const CATEGORIES = ["All Categories", "Children", "History", "Science", "Religion", "Fiction", "Non-Fiction"];
 const STATUSES = ["All Status", "AVAILABLE", "BORROWED", "LOW STOCK", "OUT OF STOCK"];
 
+// Softened hex values to match the clean mockup colors
 const statusStyle = {
-  "AVAILABLE":    { bg: "#DCFCE7", text: "#16A34A" },
-  "BORROWED":     { bg: "#FEF9C3", text: "#CA8A04" },
-  "LOW STOCK":    { bg: "#FFEDD5", text: "#EA580C" },
-  "OUT OF STOCK": { bg: "#FEE2E2", text: "#DC2626" },
+  "AVAILABLE": { bg: "#E8F5E9", text: "#2E7D32" },
+  "BORROWED": { bg: "#FFFDE7", text: "#B78103" },
+  "LOW STOCK": { bg: "#FFEBEE", text: "#C62828" }, // Changed to pale red/orange alert
+  "OUT OF STOCK": { bg: "#FFEBEE", text: "#C62828" },
 };
 
 const stats = [
-  { label: "Total Books",        value: "2,847", sub: "+24 this month",          subColor: "#055E83", border: "#055E83" },
-  { label: "Available",          value: "2,103", sub: "73.9% availability rate", subColor: "#16A34A", border: "#16A34A" },
-  { label: "Currently Borrowed", value: "611",   sub: "18 overdue returns",      subColor: "#EA580C", border: "#EA580C" },
-  { label: "Categories",         value: "12",    sub: "6 active genres",         subColor: "#CA8A04", border: "#E8C110" },
+  { label: "Total Books", value: "2,847", sub: "+24 this month", subColor: "#055E83", border: "#055E83" },
+  { label: "Available", value: "2,103", sub: "73.9% availability rate", subColor: "#16A34A", border: "#16A34A" },
+  { label: "Currently Borrowed", value: "611", sub: "18 overdue returns", subColor: "#EA580C", border: "#EA580C" },
+  { label: "Categories", value: "12", sub: "6 active genres", subColor: "#CA8A04", border: "#E8C110" },
 ];
 
 export default function Inventory() {
@@ -45,6 +46,9 @@ export default function Inventory() {
     (category === "All Categories" || b.category === category) &&
     (status === "All Status" || b.status === status)
   );
+
+  // Synchronized layout sizes: Number, Title/Author, Code, Category, Copies, Status, Actions layout
+  const gridLayout = "grid-cols-[50px_1fr_140px_110px_90px_130px_140px] items-center gap-4 px-6";
 
   return (
     <div className="flex h-screen overflow-hidden antialiased">
@@ -93,7 +97,7 @@ export default function Inventory() {
 
           {/* Table */}
           <div className="bg-white rounded-xl overflow-hidden" style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.06)", border: "1px solid #e5e7eb" }}>
-            {/* Header */}
+            {/* Header Title Bar */}
             <div className="flex items-center justify-between px-5 py-3" style={{ backgroundColor: "#1B4965" }}>
               <h2 className="text-white font-bold text-sm flex items-center gap-2">
                 <Library size={15} /> Book Catalog
@@ -106,46 +110,54 @@ export default function Inventory() {
             </div>
 
             {/* Column Headers */}
-            <div className="grid px-5 py-2.5 border-b border-gray-100 bg-gray-50/60 text-xs font-bold uppercase tracking-wider"
-              style={{ gridTemplateColumns: "44px 1fr 130px 100px 70px 120px 100px", color: "#055E83" }}>
-              {["#", "Title / Author", "Code", "Category", "Copies", "Status", "Actions"].map(h => (
-                <span key={h}>{h}</span>
-              ))}
+            <div className={`grid ${gridLayout} py-3 border-b border-gray-100 bg-gray-50/70 text-xs font-bold uppercase tracking-wider`}
+              style={{ color: "#055E83" }}>
+              <span>#</span>
+              <span>Title / Author</span>
+              <span>Code</span>
+              <span>Category</span>
+              <span>Copies</span>
+              <span className="text-center">Status</span>
+              <span className="text-center">Actions</span>
             </div>
 
             {/* Rows */}
             {filtered.map((book) => (
-              <div key={book.id}
-                className="grid px-5 py-3 items-center border-b border-gray-50 hover:bg-blue-50/20 transition text-sm"
-                style={{ gridTemplateColumns: "44px 1fr 130px 100px 70px 120px 100px" }}>
-                <span className="text-xs text-gray-400">{book.id}</span>
-                <span className="text-sm text-gray-800 font-medium">{book.title} — {book.author}</span>
+              <div key={book.id} className={`grid ${gridLayout} py-3.5 border-b border-gray-100 hover:bg-slate-50/60 transition text-sm text-gray-700`}>
+                <span className="text-xs text-gray-400 font-medium">{book.id}</span>
+                <span className="text-sm text-gray-900 font-medium">{book.title} <span className="text-gray-400 mx-1">—</span> <span className="text-gray-500 font-normal">{book.author}</span></span>
                 <span className="text-xs font-semibold" style={{ color: "#055E83" }}>{book.code}</span>
-                <span className="text-xs text-gray-600">{book.category}</span>
-                <span className="text-xs text-gray-600">{book.available} / {book.totalCopies}</span>
-                <span>
-                  <span className="text-xs font-bold px-2 py-0.5 rounded-full"
+                <span className="text-xs">{book.category}</span>
+                <span className="text-xs font-medium text-gray-600">{book.available} / {book.totalCopies}</span>
+
+                {/* Status Column centered */}
+                <div className="text-center">
+                  <span className="inline-block text-[11px] font-bold tracking-wide px-2.5 py-1 rounded-md min-w-[100px] text-center"
                     style={{ backgroundColor: statusStyle[book.status]?.bg, color: statusStyle[book.status]?.text }}>
                     {book.status}
                   </span>
-                </span>
-                <div className="flex items-center gap-1.5">
+                </div>
+
+                {/* Actions Column grouped neatly */}
+                <div className="flex items-center justify-center gap-1.5">
                   <button onClick={() => navigate(`/inventory/${book.id}`)}
-                    className="flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold hover:opacity-80 transition"
+                    className="flex items-center justify-center gap-1 px-3 py-1.5 rounded-md text-xs font-bold hover:opacity-85 transition shadow-sm"
                     style={{ backgroundColor: "#1B4965", color: "#fff" }}>
-                    <Eye size={11} /> View
+                    <Eye size={12} /> View
                   </button>
-                  <button onClick={() => navigate(`/inventory/${book.id}/edit`)}
-                    className="flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold hover:opacity-80 transition"
-                    style={{ backgroundColor: "#E8C110", color: "#1B4965" }}>
-                    <Pencil size={11} /> Edit
+                  <button
+                    onClick={() => navigate(`/inventory/${book.id}/edit`)}
+                    className="flex items-center justify-center gap-1 px-3 py-1.5 rounded-md text-xs font-bold hover:opacity-85 transition shadow-sm"
+                    style={{
+                      backgroundColor: "#E8C110",
+                      color: "#1B4965",
+                    }}
+                  >
+                    <Pencil size={12} /> Edit
                   </button>
                 </div>
               </div>
             ))}
-
-            {/* Bottom padding row */}
-            <div className="h-6" />
           </div>
 
           {/* Pagination */}
