@@ -38,8 +38,8 @@ export default function EditBook() {
       <main className="flex-1 overflow-y-auto overflow-x-hidden bg-[#F8FAFC]">
         <Navbar
           title="Inventory"
-          breadcrumb="Inventory › Book Details › Edit Book"
-          onBack={() => navigate(`/inventory/${id}`)}
+          breadcrumb="Inventory › Edit Book"
+          onBack={() => navigate("/inventory")}
         />
 
         <div className="px-8 py-6">
