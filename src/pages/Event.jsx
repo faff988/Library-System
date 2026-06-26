@@ -1,12 +1,15 @@
-import Sidebar from "../components/LibrarianSidebar";
+import Sidebar from "../components/Adminsidebar";
+import Navbar from "../components/Navbar";
 
 export default function Event() {
   return (
-    <div className="flex h-screen">
+    <div className="flex h-screen overflow-hidden antialiased">
       <Sidebar />
-      <main className="flex-1 p-6 bg-[#F8FAFC]">
-        <h1 className="text-2xl font-bold text-[#055E83]">Event Management</h1>
-        {/* Event management content goes here */}
+      <main className="flex-1 overflow-y-auto overflow-x-hidden bg-[#F8FAFC]">
+        <Navbar title="Event Management" breadcrumb="Manage Your Events" />
+        <div className="px-8 py-6">
+          {/* Event management content goes here */}
+        </div>
       </main>
     </div>
   );
