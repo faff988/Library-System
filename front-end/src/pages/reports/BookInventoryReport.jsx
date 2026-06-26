@@ -15,8 +15,8 @@ import {
   Table as TableIcon,
   TrendingUp,
 } from "lucide-react";
-import Navbar from "../components/Navbar";
-import Sidebar from "../components/Adminsidebar";
+import Navbar from "../../components/Navbar";
+import Sidebar from "../../components/Adminsidebar";
 
 const PAGE_SIZE = 5;
 

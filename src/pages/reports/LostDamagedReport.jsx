@@ -1,5 +1,4 @@
-
- import { useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   AlertCircle,
   ArrowUpRight,
@@ -14,8 +13,8 @@ import {
   Search,
   Table as TableIcon,
 } from "lucide-react";
-import Navbar from "../components/Navbar";
-import Sidebar from "../components/Adminsidebar";
+import Navbar from "../../components/Navbar";
+import Sidebar from "../../components/Adminsidebar";
 
 const PAGE_SIZE = 5;
 
@@ -175,7 +174,7 @@ const monthlyTrend = [
   { month: "Jun", lost: 34, damaged: 24 },
 ];
 
- const highRiskAlerts = [
+const highRiskAlerts = [
   {
     title: "High-Cost Missing",
     detail: "Encyclopaedia Britannica (Vol. 1-12) - $850.00",
@@ -309,8 +308,7 @@ function TrendChart() {
 
             return (
               <line
-
-               key={line}
+                key={line}
                 x1={paddingX}
                 x2={width - paddingX}
                 y1={y}
@@ -414,7 +412,7 @@ export default function LostDamagedReport() {
     setCurrentPage(1);
   };
 
-   const resetFilters = () => {
+  const resetFilters = () => {
     setTableSearch("");
     setDateRange("Last 30 Days");
     setTypeFilter("All");
@@ -498,7 +496,7 @@ export default function LostDamagedReport() {
                   />
                 </label>
 
- <label className="relative">
+                <label className="relative">
                   <AlertCircle
                     size={15}
                     className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
@@ -565,7 +563,7 @@ export default function LostDamagedReport() {
               </p>
             </div>
 
- <div className="overflow-x-auto">
+            <div className="overflow-x-auto">
               <table className="w-full min-w-[850px] text-left">
                 <thead className="bg-[#F1F6FA] text-[11px] uppercase tracking-wide text-gray-500">
                   <tr>
@@ -640,7 +638,7 @@ export default function LostDamagedReport() {
                 {Array.from({ length: pageCount }).map((_, index) => {
                   const page = index + 1;
 
-                  រី: return (
+                  return (
                     <button
                       type="button"
                       key={page}

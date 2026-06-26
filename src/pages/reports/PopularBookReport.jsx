@@ -14,8 +14,8 @@ import {
   TrendingUp,
   UsersRound,
 } from "lucide-react";
-import Navbar from "../components/Navbar";
-import Sidebar from "../components/Adminsidebar";
+import Navbar from "../../components/Navbar";
+import Sidebar from "../../components/Adminsidebar";
 
 const PAGE_SIZE = 4;
 const PERIODS = ["Daily", "Weekly", "Monthly"];

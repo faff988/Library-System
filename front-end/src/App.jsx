@@ -9,14 +9,18 @@ import BookDetails from "./pages/BookDetails";
 import EditBook from "./pages/EditBook";
 import Event from "./pages/Event";
 import BorrowReturn from "./pages/Borrow-Return";
-import Reports from "./pages/Reports";
 import Member from "./pages/Member";
 import Feedbacks from "./pages/FeedBacks";
 import Settings from "./pages/Settings";
-import PopularBookReport from "./pages/PopularBookReport";
-import BookInventoryReport from "./pages/BookIneventoryReport";
-import LostdamagedReport from "./pages/LostdamagedReport";
-
+import PopularBookReport from "./pages/reports/PopularBookReport";
+import BookInventoryReport from "./pages/reports/BookInventoryReport";
+import LostDamagedReport from "./pages/reports/LostDamagedReport";
+import BorrowReturnReport from "./pages/reports/BorrowReturnReport";
+import DailyWeeklyMonthlyTransactionReport from "./pages/reports/DailyWeeklyMonthlyTransactionReport";
+import EntryReport from "./pages/reports/EntryReport";
+import FineReport from "./pages/reports/FineReport";
+import MemberReport from "./pages/reports/MemberReport";
+import StaffActivityReport from "./pages/reports/StaffActivityReport";
 export default function App() {
   return (
     <Routes>  {/* ✅ removed BrowserRouter here, it's already in main.jsx */}
@@ -31,13 +35,18 @@ export default function App() {
       <Route path="/inventory/:id/edit" element={<EditBook />} />
       <Route path="/event" element={<Event />} />
       <Route path="/borrow-return" element={<BorrowReturn />} />
-      <Route path="/reports" element={<Reports />} />
       <Route path="/member" element={<Member />} />
       <Route path="/feedback" element={<Feedbacks />} />
       <Route path="/settings" element= {<Settings/>} />
       <Route path="/reports/popular-book" element={<PopularBookReport />} />
       <Route path="/reports/book-inventory" element={<BookInventoryReport />} />
-      <Route path="/reports/lost-damaged" element={<LostdamagedReport />} />
+      <Route path="/reports/lost-damaged" element={<LostDamagedReport />} />
+      <Route path="/reports/borrow-return" element={<BorrowReturnReport />} />
+      <Route path="/reports/transactions" element={<DailyWeeklyMonthlyTransactionReport />} />
+      <Route path="/reports/entry" element={<EntryReport />} />
+      <Route path="/reports/fine" element={<FineReport />} />
+      <Route path="/reports/member" element={<MemberReport />} />
+      <Route path="/reports/staff-activity" element={<StaffActivityReport />} />
     </Routes>
   );
 }
