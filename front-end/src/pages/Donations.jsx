@@ -1,60 +1,363 @@
-import { useState } from "react";
-import { Heart, BookOpen, DollarSign, TrendingUp, Plus, Printer, Edit2, Trash2, CheckCircle, Mail, Phone, MapPin, Calendar, Check, AlertCircle, User, Search, Filter, ArrowUpDown, ChevronLeft, ChevronRight, Eye, Pencil } from "lucide-react";
+import { useState, useMemo, useRef } from "react";
+import {
+  Heart, BookOpen, Plus, Printer, Edit2, Trash2, User,
+  Search, Filter, ArrowUpDown, ChevronLeft, ChevronRight,
+  Eye, Pencil, X, AlertCircle, Check, ImagePlus,
+} from "lucide-react";
 import Sidebar from "../components/Adminsidebar";
 import Navbar from "../components/Navbar";
 
-const DONATIONS = [
-  { id: "1", code: "DON-2026-0303", donor: "Margaret Wilson", type: "Books", items: "25 books", date: "2026-03-03", value: 450, email: "m.wilson@example.com", phone: "+855 12 345 678", address: "123 Riverside Road, Siem Reap, Cambodia", itemDesc: "25 Children's Books", qty: 25, notes: "A collection of gently used English and Khmer bilingual children's books. Requested that they be placed in the early reading section. Excellent condition.", receivedBy: "Sokha Chen (Librarian)", status: "Acknowledged", history: { count: 4, lifetime: 1250 } },
-  { id: "2", code: "DON-2026-0302", donor: "John Stevens", type: "Money", items: "Cash donation", date: "2026-03-02", value: 500, email: "john@example.com", phone: "+855 23 456 789", address: "45 Angkor Road, Siem Reap", itemDesc: "Cash Donation", qty: 1, notes: "", receivedBy: "Sokha Chen (Librarian)", status: "Acknowledged", history: { count: 2, lifetime: 800 } },
-  { id: "3", code: "DON-2026-0301", donor: "Sarah Parker", type: "Books", items: "10 children's books", date: "2026-03-01", value: 180, email: "sparker@example.com", phone: "+855 34 567 890", address: "78 Temple St, Siem Reap", itemDesc: "10 Children's Books", qty: 10, notes: "", receivedBy: "Dara Kim (Librarian)", status: "Acknowledged", history: { count: 1, lifetime: 180 } },
-  { id: "4", code: "DON-2026-0228", donor: "Anonymous", type: "Money", items: "Online donation", date: "2026-02-28", value: 1000, email: "", phone: "", address: "", itemDesc: "Online Donation", qty: 1, notes: "", receivedBy: "System", status: "Acknowledged", history: { count: 1, lifetime: 1000 } },
-  { id: "5", code: "DON-2026-0227", donor: "Community Center", type: "Books", items: "50 textbooks", date: "2026-02-27", value: 850, email: "center@community.org", phone: "+855 45 678 901", address: "Community Center, Siem Reap", itemDesc: "50 Textbooks", qty: 50, notes: "", receivedBy: "Sokha Chen (Librarian)", status: "Acknowledged", history: { count: 3, lifetime: 2100 } },
+const INITIAL_DONATIONS = [
+  {
+    id: "DON-2026-0303",
+    donor_name: "Margaret Wilson",
+    receive_by: "Sokha Chen",
+    donation_date: "2026-03-03",
+    status: "Acknowledged",
+    books: [
+      { book_title: "The Little Prince",         book_author: "Antoine de Saint-Exupéry", book_dewey_code: "843.912", book_section: "Fiction",   amount: 5,  image: null },
+      { book_title: "Charlotte's Web",            book_author: "E.B. White",               book_dewey_code: "813.54",  book_section: "Children",  amount: 10, image: null },
+      { book_title: "Matilda",                    book_author: "Roald Dahl",               book_dewey_code: "823.914", book_section: "Children",  amount: 10, image: null },
+    ],
+    history: { count: 4, totalBooks: 85 },
+  },
+  {
+    id: "DON-2026-0301",
+    donor_name: "Sarah Parker",
+    receive_by: "Dara Kim",
+    donation_date: "2026-03-01",
+    status: "Acknowledged",
+    books: [
+      { book_title: "Harry Potter and the Sorcerer's Stone", book_author: "J.K. Rowling", book_dewey_code: "823.914", book_section: "Fiction", amount: 10, image: null },
+    ],
+    history: { count: 1, totalBooks: 10 },
+  },
+  {
+    id: "DON-2026-0227",
+    donor_name: "Community Center",
+    receive_by: "Sokha Chen",
+    donation_date: "2026-02-27",
+    status: "Pending",
+    books: [
+      { book_title: "Biology Textbook Grade 10",  book_author: "Ministry of Education", book_dewey_code: "570",     book_section: "Science",    amount: 20, image: null },
+      { book_title: "Mathematics Grade 9",        book_author: "Ministry of Education", book_dewey_code: "510",     book_section: "Science",    amount: 20, image: null },
+      { book_title: "Khmer Literature Anthology", book_author: "Various Authors",       book_dewey_code: "895.932", book_section: "Literature", amount: 10, image: null },
+    ],
+    history: { count: 3, totalBooks: 120 },
+  },
 ];
 
-const TYPES = ["All Types", "Books", "Money"];
 const STATUSES = ["All Status", "Acknowledged", "Pending"];
-
-const stats = [
-  { label: "Total Donations", value: "$12,450", sub: "+18% this month", subColor: "#E11D48", border: "#E11D48" },
-  { label: "Books Donated",   value: "342",     sub: "+25 this week",   subColor: "#055E83", border: "#055E83" },
-  { label: "Cash Donations",  value: "$8,650",  sub: "+12% this month", subColor: "#16A34A", border: "#16A34A" },
-  { label: "Total Donors",    value: "156",     sub: "+8 new donors",   subColor: "#CA8A04", border: "#E8C110" },
-];
-
-const typeStyle = {
-  Books: { bg: "#EFF6FF", text: "#1D4ED8" },
-  Money: { bg: "#F0FDF4", text: "#166534" },
-};
 
 const statusStyle = {
   Acknowledged: { bg: "#E8F5E9", text: "#2E7D32" },
   Pending:      { bg: "#FFFDE7", text: "#B78103" },
 };
 
-const gridLayout = "grid-cols-[50px_1fr_170px_150px_100px_160px_140px] items-center gap-4 px-6";
+const EMPTY_BOOK = { book_title: "", book_author: "", book_dewey_code: "", book_section: "", amount: "", image: null };
 
-// ─── Page 1: Donations List ───────────────────────────────────────────────────
-function DonationsList({ onAdd, onView, onEdit }) {
-  const [search, setSearch]   = useState("");
-  const [type, setType]       = useState("All Types");
-  const [status, setStatus]   = useState("All Status");
-  const [currentPage, setCurrentPage] = useState(1);
-  const totalPages = 32;
+const tableGridStyle = {
+  display: "grid",
+  gridTemplateColumns: "130px 1fr 100px 140px 220px",
+  alignItems: "center",
+  gap: "1rem",
+  paddingLeft: "1.5rem",
+  paddingRight: "1.5rem",
+};
 
-  const filtered = DONATIONS.filter((d) =>
-    (search === "" || `${d.donor} ${d.code}`.toLowerCase().includes(search.toLowerCase())) &&
-    (type === "All Types" || d.type === type) &&
-    (status === "All Status" || d.status === status)
+const detailGridStyle = {
+  display: "grid",
+  gridTemplateColumns: "56px 2fr 1.5fr 100px 100px 60px",
+  gap: "0.75rem",
+  paddingLeft: "1.5rem",
+  paddingRight: "1.5rem",
+};
+
+const Label = ({ children }) => (
+  <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5 block">
+    {children}
+  </label>
+);
+
+const inputCls = "w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#1B4965] transition";
+
+const sumBooks = (books) => books.reduce((s, b) => s + (Number(b.amount) || 0), 0);
+
+const getInitials = (name) => name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase();
+
+const AVATAR_COLORS = [
+  { bg: "#FEF3C7", text: "#92400E" },
+  { bg: "#DBEAFE", text: "#1E40AF" },
+  { bg: "#FCE7F3", text: "#9D174D" },
+  { bg: "#D1FAE5", text: "#065F46" },
+  { bg: "#EDE9FE", text: "#5B21B6" },
+  { bg: "#FEE2E2", text: "#991B1B" },
+];
+
+const getAvatarColor = (name) => AVATAR_COLORS[name.charCodeAt(0) % AVATAR_COLORS.length];
+
+// BookDialog
+function BookDialog({ book, onSave, onClose }) {
+  const [form, setForm] = useState(book ? { ...book } : { ...EMPTY_BOOK });
+  const [error, setError] = useState(false);
+  const fileInputRef = useRef(null);
+
+  const update = (field, val) => setForm((f) => ({ ...f, [field]: val }));
+
+  const handleImageChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => update("image", reader.result);
+    reader.readAsDataURL(file);
+  };
+
+  const handleSave = () => {
+    if (!form.book_title.trim() || !form.book_author.trim() || !form.amount) {
+      setError(true);
+      return;
+    }
+    onSave({ ...form, amount: parseInt(form.amount) || 1 });
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+      onClick={(e) => e.target === e.currentTarget && onClose()}
+    >
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-4" style={{ backgroundColor: "#1B4965" }}>
+          <h2 className="text-white font-bold text-sm flex items-center gap-2">
+            <BookOpen size={14} className="text-[#E8C110]" />
+            {book ? "Edit Book" : "Add Book"}
+          </h2>
+          <button onClick={onClose} className="text-white/60 hover:text-white transition">
+            <X size={16} />
+          </button>
+        </div>
+
+        <div className="p-5 space-y-4">
+          {/* Image Upload */}
+          <div>
+            <Label>Book Cover (optional)</Label>
+            <div className="flex items-center gap-4">
+              {/* Preview box — click to upload */}
+              <div
+                className="w-20 h-28 rounded-lg border-2 border-dashed border-gray-200 flex items-center justify-center overflow-hidden shrink-0 bg-gray-50 cursor-pointer hover:border-[#1B4965] transition"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                {form.image ? (
+                  <img src={form.image} alt="cover" className="w-full h-full object-cover rounded-lg" />
+                ) : (
+                  <div className="flex flex-col items-center gap-1 text-gray-300">
+                    <ImagePlus size={22} />
+                    <span className="text-[10px] font-semibold text-gray-400">Cover</span>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="flex items-center gap-1.5 text-xs font-bold px-4 py-2 rounded-lg border border-gray-200 text-gray-600 hover:border-[#1B4965] hover:text-[#1B4965] transition bg-white"
+                >
+                  <ImagePlus size={13} />
+                  {form.image ? "Change Image" : "Upload Image"}
+                </button>
+                {form.image && (
+                  <button
+                    type="button"
+                    onClick={() => update("image", null)}
+                    className="flex items-center gap-1.5 text-xs font-bold px-4 py-2 rounded-lg border border-red-100 text-red-400 hover:bg-red-50 transition bg-white"
+                  >
+                    <X size={12} /> Remove
+                  </button>
+                )}
+                <p className="text-[11px] text-gray-400 leading-snug">
+                  JPG, PNG or WEBP<br />Max 5 MB
+                </p>
+              </div>
+            </div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleImageChange}
+            />
+          </div>
+
+          {/* Title + Author */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label>Book Title</Label>
+              <input value={form.book_title} onChange={(e) => update("book_title", e.target.value)} placeholder="e.g., The Little Prince" className={inputCls} autoFocus />
+            </div>
+            <div>
+              <Label>Author</Label>
+              <input value={form.book_author} onChange={(e) => update("book_author", e.target.value)} placeholder="e.g., Antoine" className={inputCls} />
+            </div>
+          </div>
+
+          {/* Dewey + Section + Qty */}
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <Label>Dewey Code</Label>
+              <input value={form.book_dewey_code} onChange={(e) => update("book_dewey_code", e.target.value)} placeholder="843.912" className={inputCls} />
+            </div>
+            <div>
+              <Label>Section</Label>
+              <input value={form.book_section} onChange={(e) => update("book_section", e.target.value)} placeholder="Fiction" className={inputCls} />
+            </div>
+            <div>
+              <Label>Quantity</Label>
+              <input type="number" min="1" value={form.amount} onChange={(e) => update("amount", e.target.value)} placeholder="Qty" className={inputCls} />
+            </div>
+          </div>
+
+          {error && (
+            <p className="text-xs text-red-500 bg-red-50 px-3 py-2 rounded-lg flex items-center gap-1.5">
+              <AlertCircle size={12} /> Title, author, and quantity are required.
+            </p>
+          )}
+        </div>
+
+        <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-gray-100">
+          <button onClick={onClose} className="text-sm text-gray-500 px-4 py-2 hover:text-gray-700 font-semibold transition">Cancel</button>
+          <button onClick={handleSave} className="flex items-center gap-1.5 text-white text-sm font-bold px-5 py-2 rounded-lg hover:opacity-90 transition shadow-sm" style={{ backgroundColor: "#1B4965" }}>
+            <Check size={13} /> Save
+          </button>
+        </div>
+      </div>
+    </div>
   );
+}
+
+// BooksSection
+function BooksSection({ books, setBooks }) {
+  const [dialog, setDialog] = useState(null);
+  const totalAmount = sumBooks(books);
+
+  const handleSaveBook = (book) => {
+    if (dialog === "add") {
+      setBooks((prev) => [...prev, book]);
+    } else {
+      setBooks((prev) => prev.map((b, i) => (i === dialog ? book : b)));
+    }
+    setDialog(null);
+  };
+
+  return (
+    <>
+      {dialog !== null && (
+        <BookDialog
+          book={typeof dialog === "number" ? books[dialog] : null}
+          onSave={handleSaveBook}
+          onClose={() => setDialog(null)}
+        />
+      )}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className="flex items-center justify-between px-6 py-4" style={{ backgroundColor: "#1B4965" }}>
+          <div className="flex items-center gap-2">
+            <BookOpen size={15} className="text-[#E8C110]" />
+            <h3 className="text-white font-bold text-sm tracking-wide">Books Donated</h3>
+            {totalAmount > 0 && (
+              <span className="text-xs font-bold px-2 py-0.5 rounded-md ml-2" style={{ backgroundColor: "#E8C110", color: "#1B4965" }}>
+                {totalAmount} total
+              </span>
+            )}
+          </div>
+          <button onClick={() => setDialog("add")} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold hover:opacity-90 transition border border-white/30 text-white bg-white/10">
+            <Plus size={12} /> Add Book
+          </button>
+        </div>
+
+        <div className="p-6">
+          {books.length === 0 ? (
+            <div className="border-2 border-dashed border-gray-200 rounded-xl p-10 text-center">
+              <BookOpen size={28} className="mx-auto text-gray-300 mb-3" />
+              <p className="text-sm text-gray-400 mb-4">No books added yet. Click "Add Book" to record the first title.</p>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {books.map((b, i) => (
+                <div key={i} className="flex items-center justify-between border border-gray-100 rounded-xl px-4 py-3 bg-gray-50/40 hover:bg-slate-50 transition">
+                  <div className="flex items-center gap-3 min-w-0">
+                    {/* Cover thumbnail in list */}
+                    <div className="w-9 h-12 rounded-md overflow-hidden shrink-0 bg-gray-100 border border-gray-200 flex items-center justify-center">
+                      {b.image ? (
+                        <img src={b.image} alt={b.book_title} className="w-full h-full object-cover" />
+                      ) : (
+                        <BookOpen size={14} className="text-gray-300" />
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-gray-800 truncate">{b.book_title}</p>
+                      <p className="text-xs text-gray-400 mt-0.5">
+                        {b.book_author}{b.book_dewey_code ? ` · Dewey: ${b.book_dewey_code}` : ""}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0 ml-3">
+                    {b.book_section && (
+                      <span className="text-[11px] font-bold px-2 py-0.5 rounded-md" style={{ backgroundColor: "#EFF6FF", color: "#1D4ED8" }}>
+                        {b.book_section}
+                      </span>
+                    )}
+                    <span className="text-[11px] font-bold px-2 py-0.5 rounded-md" style={{ backgroundColor: "#EEF4F8", color: "#1B4965" }}>
+                      x{b.amount}
+                    </span>
+                    <button onClick={() => setDialog(i)} className="p-1.5 text-gray-400 hover:text-[#1B4965] transition">
+                      <Pencil size={13} />
+                    </button>
+                    <button onClick={() => setBooks((prev) => prev.filter((_, idx) => idx !== i))} className="p-1.5 text-gray-400 hover:text-red-500 transition">
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </>
+  );
+}
+
+// DonationsList
+function DonationsList({ data, onAdd, onView, onEdit, onDelete }) {
+  const [search, setSearch]           = useState("");
+  const [status, setStatus]           = useState("All Status");
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 5;
+
+  const liveStats = useMemo(() => {
+    const totalDonations = data.length;
+    const totalBooks     = data.reduce((s, d) => s + sumBooks(d.books), 0);
+    const uniqueDonors   = new Set(data.map((d) => d.donor_name)).size;
+    return [
+      { label: "Total Donations", value: String(totalDonations), sub: "+18% this month", subColor: "#E11D48", border: "#E11D48" },
+      { label: "Books Donated",   value: String(totalBooks),     sub: "+25 this week",  subColor: "#055E83", border: "#055E83" },
+      { label: "Total Donors",    value: String(uniqueDonors),   sub: "+8 new donors",  subColor: "#CA8A04", border: "#E8C110" },
+    ];
+  }, [data]);
+
+  const filtered = data.filter(
+    (d) =>
+      (search === "" || `${d.donor_name} ${d.id}`.toLowerCase().includes(search.toLowerCase())) &&
+      (status === "All Status" || d.status === status)
+  );
+
+  const totalPages    = Math.max(1, Math.ceil(filtered.length / itemsPerPage));
+  const paginatedData = filtered.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   return (
     <div>
       <Navbar title="Donations" breadcrumb="Welcome back, Admin!" />
       <div className="px-6 py-5 space-y-4">
-
-        {/* Stat Cards */}
-        <div className="grid grid-cols-4 gap-3">
-          {stats.map(({ label, value, sub, subColor, border }) => (
+        <div className="grid grid-cols-3 gap-3">
+          {liveStats.map(({ label, value, sub, subColor, border }) => (
             <div key={label} className="bg-white rounded-xl px-5 py-4" style={{ borderTop: `3px solid ${border}`, boxShadow: "0 2px 12px rgba(0,0,0,0.06)" }}>
               <p className="text-xs text-gray-400 mb-1">{label}</p>
               <p className="text-2xl font-bold leading-tight" style={{ color: subColor }}>{value}</p>
@@ -63,250 +366,135 @@ function DonationsList({ onAdd, onView, onEdit }) {
           ))}
         </div>
 
-        {/* Filters */}
         <div className="flex items-center gap-2 flex-wrap">
-          <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-2 w-60">
+          <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-2 w-64">
             <Search size={13} className="text-gray-400 shrink-0" />
-            <input value={search} onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search by donor, ID, type..."
-              className="text-xs outline-none w-full bg-transparent text-gray-600 placeholder-gray-400" />
+            <input value={search} onChange={(e) => { setSearch(e.target.value); setCurrentPage(1); }} placeholder="Search donor or record ID..." className="text-xs outline-none w-full bg-transparent text-gray-600" />
           </div>
           <div className="flex items-center gap-1.5 bg-white border border-gray-200 rounded-lg px-3 py-2">
             <Filter size={12} className="text-gray-400" />
-            <select value={type} onChange={(e) => setType(e.target.value)} className="text-xs outline-none bg-transparent text-gray-600">
-              {TYPES.map((t) => <option key={t}>{t}</option>)}
-            </select>
-          </div>
-          <div className="flex items-center gap-1.5 bg-white border border-gray-200 rounded-lg px-3 py-2">
-            <Filter size={12} className="text-gray-400" />
-            <select value={status} onChange={(e) => setStatus(e.target.value)} className="text-xs outline-none bg-transparent text-gray-600">
+            <select value={status} onChange={(e) => { setStatus(e.target.value); setCurrentPage(1); }} className="text-xs outline-none bg-transparent text-gray-600">
               {STATUSES.map((s) => <option key={s}>{s}</option>)}
             </select>
           </div>
-          <div className="flex items-center gap-1.5 bg-white border border-gray-200 rounded-lg px-3 py-2">
-            <ArrowUpDown size={12} className="text-gray-400" />
-            <span className="text-xs text-gray-600">Sort: Date</span>
+          <div className="flex items-center gap-1.5 bg-white border border-gray-200 rounded-lg px-3 py-2 text-xs text-gray-600">
+            <ArrowUpDown size={12} className="text-gray-400" /> Sort: Date
           </div>
-          <p className="ml-auto text-xs text-gray-400">Showing 1–{filtered.length} of 156 donations</p>
+          <p className="ml-auto text-xs text-gray-400">Showing {filtered.length} entries</p>
         </div>
 
-        {/* Table */}
-        <div className="bg-white rounded-xl overflow-hidden" style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.06)", border: "1px solid #e5e7eb" }}>
-          {/* Header Title Bar */}
+        <div className="bg-white rounded-xl border border-gray-200" style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.06)", overflow: "hidden" }}>
           <div className="flex items-center justify-between px-5 py-3" style={{ backgroundColor: "#1B4965" }}>
-            <h2 className="text-white font-bold text-sm flex items-center gap-2">
-              <Heart size={15} /> Donation Catalog
-            </h2>
-            <button onClick={onAdd}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold hover:opacity-90 transition"
-              style={{ backgroundColor: "#E8C110", color: "#1B4965" }}>
+            <h2 className="text-white font-bold text-sm flex items-center gap-2"><Heart size={15} /> Donation Catalog</h2>
+            <button onClick={onAdd} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold hover:opacity-90 transition" style={{ backgroundColor: "#E8C110", color: "#1B4965" }}>
               <Plus size={13} /> Add Donation
             </button>
           </div>
 
-          {/* Column Headers */}
-          <div className={`grid ${gridLayout} py-3 border-b border-gray-100 bg-gray-50/70 text-xs font-bold uppercase tracking-wider`}
-            style={{ color: "#055E83" }}>
-            <span>D.ID</span>
-            <span>Donor </span>
-            <span>Type</span>
-            <span>Items</span>
-            <span>Date</span>
-            <span className="text-center">Status</span>
-            <span className="text-center">Actions</span>
-          </div>
-
-          {/* Rows */}
-          {filtered.map((d) => (
-            <div key={d.id} className={`grid ${gridLayout} py-3.5 border-b border-gray-100 hover:bg-slate-50/60 transition text-sm text-gray-700`}>
-              <span className="text-xs text-gray-400 font-medium">{d.id}</span>
-              <div>
-                <p className="text-sm text-gray-900 font-semibold leading-tight">{d.donor}</p>
-                <p className="text-xs font-semibold mt-0.5" style={{ color: "#055E83" }}>{d.code}</p>
-              </div>
-              <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 rounded-md w-fit"
-                style={{ backgroundColor: typeStyle[d.type]?.bg, color: typeStyle[d.type]?.text }}>
-                {d.type === "Books" ? <BookOpen size={11} /> : <DollarSign size={11} />} {d.type}
-              </span>
-              <span className="text-xs font-medium text-gray-600">{d.items}</span>
-              <span className="text-xs text-gray-500">{d.date}</span>
-
-              {/* Status */}
-              <div className="text-center">
-                <span className="inline-block text-[11px] font-bold tracking-wide px-2.5 py-1 rounded-md min-w-[100px] text-center"
-                  style={{ backgroundColor: statusStyle[d.status]?.bg, color: statusStyle[d.status]?.text }}>
-                  {d.status}
-                </span>
+          <div style={{ overflowX: "auto", width: "100%" }}>
+            <div style={{ minWidth: "900px" }}>
+              <div style={{ ...tableGridStyle, paddingTop: "0.75rem", paddingBottom: "0.75rem" }} className="border-b border-gray-100 bg-gray-50/70 text-xs font-bold uppercase tracking-wider">
+                <span style={{ color: "#055E83" }}>Donation ID</span>
+                <span style={{ color: "#055E83" }}>Donor</span>
+                <span style={{ color: "#055E83" }}>Books</span>
+                <span style={{ color: "#055E83", textAlign: "center" }}>Status</span>
+                <span style={{ color: "#055E83", textAlign: "center" }}>Actions</span>
               </div>
 
-              {/* Actions */}
-              <div className="flex items-center justify-center gap-1.5">
-                <button onClick={() => onView(d)}
-                  className="flex items-center justify-center gap-1 px-3 py-1.5 rounded-md text-xs font-bold hover:opacity-85 transition shadow-sm"
-                  style={{ backgroundColor: "#1B4965", color: "#fff" }}>
-                  <Eye size={12} /> View
-                </button>
-                <button onClick={() => onEdit(d)}
-                  className="flex items-center justify-center gap-1 px-3 py-1.5 rounded-md text-xs font-bold hover:opacity-85 transition shadow-sm"
-                  style={{ backgroundColor: "#E8C110", color: "#1B4965" }}>
-                  <Pencil size={12} /> Edit
-                </button>
-              </div>
+              {paginatedData.length === 0 ? (
+                <div className="p-8 text-center text-sm text-gray-400">No donation records match your filter criteria.</div>
+              ) : (
+                paginatedData.map((d) => {
+                  const avatarColor = getAvatarColor(d.donor_name);
+                  return (
+                    <div key={d.id} style={{ ...tableGridStyle, paddingTop: "0.875rem", paddingBottom: "0.875rem" }} className="border-b border-gray-100 hover:bg-slate-50/60 transition">
+                      <span className="text-[11px] font-bold tracking-wide" style={{ color: "#055E83" }}>{d.id}</span>
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-9 h-9 rounded-lg flex items-center justify-center text-xs font-bold shrink-0" style={{ backgroundColor: avatarColor.bg, color: avatarColor.text }}>
+                          {getInitials(d.donor_name)}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-gray-900 truncate">{d.donor_name}</p>
+                          <p className="text-[11px] text-gray-400">Donated {d.donation_date}</p>
+                        </div>
+                      </div>
+                      <span className="text-xs font-medium text-gray-600">{sumBooks(d.books)} books</span>
+                      <div style={{ textAlign: "center" }}>
+                        <span className="inline-block text-[11px] font-bold px-2.5 py-1 rounded-md" style={{ backgroundColor: statusStyle[d.status]?.bg, color: statusStyle[d.status]?.text, minWidth: "100px" }}>
+                          {d.status}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-center gap-1.5">
+                        <button onClick={() => onView(d)} className="flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-bold bg-[#1B4965] text-white hover:opacity-85 transition"><Eye size={12} /> View</button>
+                        <button onClick={() => onEdit(d)} className="flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-bold bg-[#E8C110] text-[#1B4965] hover:opacity-85 transition"><Pencil size={12} /> Edit</button>
+                        <button onClick={() => onDelete(d)} className="flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-bold bg-red-50 text-red-500 hover:bg-red-100 transition"><Trash2 size={12} /> Delete</button>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
             </div>
-          ))}
-        </div>
-
-        {/* Pagination */}
-        <div className="flex items-center justify-between pb-2">
-          <p className="text-xs text-gray-400">Page {currentPage} of {totalPages}</p>
-          <div className="flex items-center gap-1">
-            <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-              className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs border border-gray-200 text-gray-500 hover:bg-gray-50 transition">
-              <ChevronLeft size={12} /> Prev
-            </button>
-            {[1, 2, 3].map(n => (
-              <button key={n} onClick={() => setCurrentPage(n)}
-                className="w-7 h-7 rounded-lg text-xs font-semibold transition"
-                style={{ backgroundColor: currentPage === n ? "#1B4965" : "transparent", color: currentPage === n ? "#fff" : "#64748B", border: currentPage === n ? "none" : "1px solid #E2E8F0" }}>
-                {n}
-              </button>
-            ))}
-            <span className="text-gray-400 text-xs px-1">...</span>
-            <button className="w-7 h-7 rounded-lg text-xs font-semibold border border-gray-200 text-gray-500">{totalPages}</button>
-            <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-              className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold transition"
-              style={{ backgroundColor: "#1B4965", color: "#fff" }}>
-              Next <ChevronRight size={12} />
-            </button>
           </div>
         </div>
 
+        {totalPages > 1 && (
+          <div className="flex items-center justify-end gap-2 pt-2">
+            <button disabled={currentPage === 1} onClick={() => setCurrentPage((p) => p - 1)} className="p-2 border rounded-lg hover:bg-gray-50 disabled:opacity-40 transition"><ChevronLeft size={14} /></button>
+            <span className="text-xs text-gray-500 font-medium px-2">Page {currentPage} of {totalPages}</span>
+            <button disabled={currentPage === totalPages} onClick={() => setCurrentPage((p) => p + 1)} className="p-2 border rounded-lg hover:bg-gray-50 disabled:opacity-40 transition"><ChevronRight size={14} /></button>
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-// ─── Page 2: Add Donation ─────────────────────────────────────────────────────
+// AddDonation
 function AddDonation({ onCancel, onSave }) {
-  const [donationType, setDonationType] = useState("books");
-  const [anon, setAnon] = useState(false);
-  const [form, setForm] = useState({ name: "", email: "", phone: "+855", desc: "", qty: "", value: "", date: "", notes: "" });
+  const [donor, setDonor] = useState({ donor_name: "", receive_by: "", donation_date: new Date().toISOString().split("T")[0] });
+  const [books, setBooks]           = useState([]);
+  const [donorError, setDonorError] = useState(false);
+
+  const handleSave = () => {
+    if (!donor.donor_name.trim()) { setDonorError(true); return; }
+    const nextId = `DON-2026-${Math.floor(1000 + Math.random() * 9000)}`;
+    onSave({ id: nextId, ...donor, status: "Pending", books, history: { count: 1, totalBooks: sumBooks(books) } });
+  };
 
   return (
     <div>
-      <Navbar title="Donations" breadcrumb="Donations › Add New Donation" onBack={onCancel} />
-      <div className="px-14 py-10 max-w-6xl mx-auto">
-        <div className="flex items-start justify-between mb-8">
-          <div>
-            <h2 className="text-2xl font-bold text-[#1B4965]">Add New Donation</h2>
-            <p className="text-sm text-gray-400 mt-0.5">Record a new donation from a community member or organization.</p>
-          </div>
-          <button onClick={onCancel} className="text-sm text-gray-500 hover:text-gray-700 font-semibold px-2 py-1 transition">Cancel</button>
+      <Navbar title="Donations" breadcrumb="Donations > Add New" onBack={onCancel} />
+      <div className="px-14 py-10 max-w-5xl mx-auto space-y-5">
+        <div>
+          <h2 className="text-2xl font-bold text-[#1B4965]">Add New Donation</h2>
+          <p className="text-sm text-gray-400">Record a structural catalog payload from library sponsors.</p>
         </div>
-
-        {/* Donor Info */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden mb-4">
+        <div className="bg-white rounded-xl border border-gray-100 overflow-hidden shadow-sm">
           <div className="flex items-center gap-2 px-6 py-4" style={{ backgroundColor: "#1B4965" }}>
             <User size={15} className="text-[#E8C110]" />
-            <h3 className="text-white font-bold text-sm tracking-wide">Donor Information</h3>
+            <h3 className="text-white font-bold text-sm">Donor Metadata</h3>
           </div>
-          <div className="p-6">
-            <div className="grid grid-cols-2 gap-4 mb-4">
-              <div>
-                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5 block">Donor Name</label>
-                <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })}
-                  placeholder="Enter full name or organization"
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#1B4965] transition" />
-              </div>
-              <div className="flex items-end pb-1">
-                <label className="flex items-center gap-2 text-sm text-gray-600 font-medium cursor-pointer">
-                  <input type="checkbox" checked={anon} onChange={(e) => setAnon(e.target.checked)} className="w-4 h-4 accent-[#1B4965] rounded" />
-                  Make donation anonymous
-                </label>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5 block">Email Address (Optional)</label>
-                <input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })}
-                  placeholder="For tax receipt"
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#1B4965] transition" />
-              </div>
-              <div>
-                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5 block">Phone Number (Optional)</label>
-                <input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#1B4965] transition" />
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Donation Details */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-          <div className="flex items-center gap-2 px-6 py-4" style={{ backgroundColor: "#1B4965" }}>
-            <BookOpen size={15} className="text-[#E8C110]" />
-            <h3 className="text-white font-bold text-sm tracking-wide">Donation Details</h3>
-          </div>
-          <div className="p-6">
-            <div className="mb-4">
-              <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 block">Donation Type</label>
-              <div className="grid grid-cols-2 gap-3">
-                <button onClick={() => setDonationType("books")}
-                  className={`flex items-center justify-center gap-2 py-2.5 rounded-lg border text-sm font-bold transition ${donationType === "books" ? "border-[#1B4965] bg-[#1B4965]/5 text-[#1B4965]" : "border-gray-200 text-gray-500 hover:border-gray-300"}`}>
-                  <BookOpen size={14} /> Books & Materials
-                </button>
-                <button onClick={() => setDonationType("money")}
-                  className={`flex items-center justify-center gap-2 py-2.5 rounded-lg border text-sm font-bold transition ${donationType === "money" ? "border-[#1B4965] bg-[#1B4965]/5 text-[#1B4965]" : "border-gray-200 text-gray-500 hover:border-gray-300"}`}>
-                  <DollarSign size={14} /> Financial Contribution
-                </button>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4 mb-4">
-              <div>
-                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5 block">Item Description</label>
-                <input value={form.desc} onChange={(e) => setForm({ ...form, desc: e.target.value })}
-                  placeholder="e.g., Children's books, Textbooks"
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#1B4965] transition" />
-              </div>
-              <div>
-                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5 block">Quantity</label>
-                <input value={form.qty} onChange={(e) => setForm({ ...form, qty: e.target.value })}
-                  placeholder="Number of items"
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#1B4965] transition" />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4 mb-4">
-              <div>
-                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5 block">Estimated Value (USD)</label>
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
-                  <input value={form.value} onChange={(e) => setForm({ ...form, value: e.target.value })}
-                    placeholder="0.00"
-                    className="w-full border border-gray-200 rounded-lg pl-7 pr-3 py-2.5 text-sm outline-none focus:border-[#1B4965] transition" />
-                </div>
-              </div>
-              <div>
-                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5 block">Date Received</label>
-                <input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#1B4965] transition" />
-              </div>
+          <div className="p-6 grid grid-cols-3 gap-4">
+            <div>
+              <Label>Donor Name</Label>
+              <input value={donor.donor_name} onChange={(e) => { setDonor({ ...donor, donor_name: e.target.value }); setDonorError(false); }} className={inputCls} placeholder="Individual or Institution" />
+              {donorError && <p className="mt-1.5 text-xs text-red-500 flex items-center gap-1"><AlertCircle size={11} /> Donor name is required.</p>}
             </div>
             <div>
-              <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5 block">Additional Notes</label>
-              <textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })}
-                placeholder="Any special instructions or details..."
-                rows={3}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#1B4965] transition resize-none" />
+              <Label>Received By</Label>
+              <input value={donor.receive_by} onChange={(e) => setDonor({ ...donor, receive_by: e.target.value })} className={inputCls} placeholder="Staff Name" />
+            </div>
+            <div>
+              <Label>Donation Date</Label>
+              <input type="date" value={donor.donation_date} onChange={(e) => setDonor({ ...donor, donation_date: e.target.value })} className={inputCls} />
             </div>
           </div>
         </div>
-
-        <div className="flex items-center justify-end gap-3 mt-5 pt-4 border-t border-gray-100">
-          <button onClick={onCancel} className="px-5 py-2.5 text-sm font-bold text-gray-500 hover:text-gray-700 transition">Clear Form</button>
-          <button onClick={onSave}
-            className="flex items-center gap-2 text-white text-sm font-bold px-6 py-2.5 rounded-lg hover:opacity-90 transition shadow-sm"
-            style={{ backgroundColor: "#1B4965" }}>
-            <Check size={14} /> Save Donation
+        <BooksSection books={books} setBooks={setBooks} />
+        <div className="flex justify-end gap-3 pt-4 border-t">
+          <button onClick={onCancel} className="text-sm text-gray-500 font-semibold px-4 py-2 hover:text-gray-700 transition">Cancel</button>
+          <button onClick={handleSave} className="bg-[#1B4965] text-white text-sm font-bold px-6 py-2.5 rounded-lg flex items-center gap-2 shadow-sm hover:opacity-90 transition">
+            <Check size={14} /> Save Record
           </button>
         </div>
       </div>
@@ -314,134 +502,81 @@ function AddDonation({ onCancel, onSave }) {
   );
 }
 
-// ─── Page 3: Donor Detail ─────────────────────────────────────────────────────
+// DonorDetail
 function DonorDetail({ donation, onEdit, onDelete, onBackToList }) {
+  if (!donation) return null;
+
   return (
     <div>
-      <Navbar title="Donations" breadcrumb="Donations › Donor Information" onBack={onBackToList} />
-      <div className="px-6 py-5">
-
-        {/* Status Bar */}
-        <div className="flex items-center justify-between bg-white rounded-xl px-6 py-4 mb-5 border border-gray-100"
-          style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.06)" }}>
+      <Navbar title="Donations" breadcrumb="Donations > Detail" onBack={onBackToList} />
+      <div className="px-6 py-5 space-y-4">
+        <div className="flex items-center justify-between bg-white rounded-xl px-6 py-4 border border-gray-100 shadow-sm">
           <div className="flex items-center gap-3">
-            <span className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-md"
-              style={{ backgroundColor: "#E8F5E9", color: "#2E7D32" }}>
-              <CheckCircle size={12} /> {donation.status}
-            </span>
-            <span className="text-xs font-bold tracking-wider" style={{ color: "#055E83" }}>#{donation.code}</span>
+            <span className="text-xs font-bold px-3 py-1.5 rounded-md" style={{ backgroundColor: statusStyle[donation.status]?.bg, color: statusStyle[donation.status]?.text }}>{donation.status}</span>
+            <span className="text-xs font-bold" style={{ color: "#055E83" }}>#{donation.id}</span>
           </div>
           <div className="flex items-center gap-2">
-            <button className="flex items-center gap-1.5 text-xs font-bold text-gray-600 border border-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-50 transition">
-              <Printer size={12} /> Print Receipt
+            <button className="text-xs font-semibold text-gray-500 flex items-center gap-1.5 px-3 py-1.5 rounded-lg hover:bg-gray-100 transition">
+              <Printer size={13} /> Receipt
             </button>
-            <button onClick={onEdit}
-              className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg hover:opacity-85 transition"
-              style={{ backgroundColor: "#E8C110", color: "#1B4965", border: "none" }}>
-              <Edit2 size={12} /> Edit
+            <div className="w-px h-4 bg-gray-200" />
+            <button onClick={onEdit} className="text-xs font-semibold flex items-center gap-1.5 px-3 py-1.5 rounded-lg hover:opacity-90 transition" style={{ backgroundColor: "#1B4965", color: "#fff" }}>
+              <Edit2 size={13} /> Edit
             </button>
-            <button onClick={onDelete}
-              className="flex items-center gap-1.5 text-xs font-bold text-red-500 border border-red-200 px-3 py-1.5 rounded-lg hover:bg-red-50 transition">
-              <Trash2 size={12} /> Delete
+            <button onClick={onDelete} className="text-xs font-semibold text-red-500 flex items-center gap-1.5 px-3 py-1.5 rounded-lg hover:bg-red-50 transition">
+              <Trash2 size={13} /> Delete
             </button>
           </div>
         </div>
 
         <div className="grid grid-cols-3 gap-4">
-          <div className="col-span-2 flex flex-col gap-4">
-
-            {/* Donor Info Card */}
-            <div className="bg-white rounded-xl border border-gray-100 overflow-hidden" style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.06)" }}>
-              <div className="flex items-center gap-2 px-6 py-4" style={{ backgroundColor: "#1B4965" }}>
+          <div className="col-span-2 space-y-4">
+            <div className="bg-white rounded-xl border border-gray-100 overflow-hidden shadow-sm">
+              <div className="flex items-center gap-2 px-6 py-4 bg-[#1B4965] text-white">
                 <User size={14} className="text-[#E8C110]" />
-                <h3 className="text-white font-bold text-sm tracking-wide">Donor Information</h3>
+                <h3 className="font-bold text-sm">Donor Information</h3>
               </div>
-              <div className="p-6">
-                <div className="flex items-center gap-4 mb-4">
-                  <div className="w-14 h-14 rounded-full flex items-center justify-center font-bold text-sm"
-                    style={{ backgroundColor: "#1B4965/10", background: "#EEF4F8", color: "#1B4965" }}>
-                    {donation.donor === "Anonymous" ? "?" : donation.donor.split(" ").map(n => n[0]).join("")}
-                  </div>
-                  <div>
-                    <p className="font-bold text-gray-800 text-sm">{donation.donor}</p>
-                    <p className="text-xs text-gray-400 mt-0.5">Community Member · Donor since 2024</p>
-                  </div>
-                </div>
-                <div className="flex flex-col gap-2">
-                  {donation.email && <div className="flex items-center gap-2 text-xs text-gray-500"><Mail size={13} className="text-gray-400" /> {donation.email}</div>}
-                  {donation.phone && <div className="flex items-center gap-2 text-xs text-gray-500"><Phone size={13} className="text-gray-400" /> {donation.phone}</div>}
-                  {donation.address && <div className="flex items-center gap-2 text-xs text-gray-500"><MapPin size={13} className="text-gray-400" /> {donation.address}</div>}
-                </div>
+              <div className="p-6 grid grid-cols-3 gap-4">
+                <div><p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Donor</p><p className="text-sm font-bold text-gray-800 mt-1">{donation.donor_name}</p></div>
+                <div><p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Receiver Staff</p><p className="text-sm font-bold text-gray-700 mt-1">{donation.receive_by || "—"}</p></div>
+                <div><p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Date</p><p className="text-sm font-bold text-gray-700 mt-1">{donation.donation_date}</p></div>
               </div>
             </div>
 
-            {/* Donation Details Card */}
-            <div className="bg-white rounded-xl border border-gray-100 overflow-hidden" style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.06)" }}>
-              <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-                <div className="flex items-center gap-2">
-                  <BookOpen size={14} className="text-[#E8C110]" />
-                  <h3 className="font-bold text-sm" style={{ color: "#1B4965" }}>Donation Details</h3>
-                </div>
-                <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 rounded-md"
-                  style={{ backgroundColor: typeStyle[donation.type]?.bg, color: typeStyle[donation.type]?.text }}>
-                  {donation.type === "Books" ? <BookOpen size={11} /> : <DollarSign size={11} />}
-                  {donation.type === "Books" ? "Books & Materials" : "Financial Contribution"}
-                </span>
+            <div className="bg-white rounded-xl border border-gray-100 overflow-hidden shadow-sm">
+              <div style={{ ...detailGridStyle, paddingTop: "0.625rem", paddingBottom: "0.625rem" }} className="bg-gray-50 border-b text-xs font-bold uppercase">
+                <span style={{ color: "#055E83" }}>Cover</span>
+                <span style={{ color: "#055E83" }}>Title</span>
+                <span style={{ color: "#055E83" }}>Author</span>
+                <span style={{ color: "#055E83" }}>Dewey</span>
+                <span style={{ color: "#055E83" }}>Section</span>
+                <span style={{ color: "#055E83", textAlign: "center" }}>Qty</span>
               </div>
-              <div className="p-6">
-                <div className="grid grid-cols-2 gap-y-4 gap-x-6 mb-4">
-                  {[
-                    { label: "Items Donated",    value: donation.itemDesc },
-                    { label: "Estimated Value",  value: `$${donation.value.toFixed(2)}` },
-                    { label: "Date Received",    value: donation.date, icon: <Calendar size={12} className="text-gray-400" /> },
-                    { label: "Received By",      value: donation.receivedBy },
-                  ].map(({ label, value, icon }) => (
-                    <div key={label}>
-                      <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">{label}</p>
-                      <p className="font-bold text-gray-700 text-sm flex items-center gap-1.5">{icon}{value}</p>
-                    </div>
-                  ))}
-                </div>
-                {donation.notes && (
-                  <div className="mt-2">
-                    <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1.5">Notes</p>
-                    <div className="bg-gray-50 rounded-lg p-3.5 text-xs text-gray-600 leading-relaxed border border-gray-100">{donation.notes}</div>
+              {donation.books.map((book, i) => (
+                <div key={i} style={{ ...detailGridStyle, paddingTop: "0.75rem", paddingBottom: "0.75rem", alignItems: "center" }} className="text-sm text-gray-800 hover:bg-gray-50/40 transition">
+                  <div className="w-9 h-12 rounded-md overflow-hidden bg-gray-100 border border-gray-200 flex items-center justify-center shrink-0">
+                    {book.image ? (
+                      <img src={book.image} alt={book.book_title} className="w-full h-full object-cover" />
+                    ) : (
+                      <BookOpen size={13} className="text-gray-300" />
+                    )}
                   </div>
-                )}
-              </div>
+                  <p className="font-semibold truncate">{book.book_title}</p>
+                  <p className="text-xs text-gray-500 truncate">{book.book_author}</p>
+                  <p className="text-xs font-mono">{book.book_dewey_code || "—"}</p>
+                  <div>{book.book_section ? <span className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-blue-50 text-blue-700">{book.book_section}</span> : "—"}</div>
+                  <p className="font-bold text-center text-[#1B4965]">{book.amount}</p>
+                </div>
+              ))}
             </div>
           </div>
 
-          {/* Sidebar */}
-          <div className="flex flex-col gap-4">
-            <div className="rounded-xl p-5 text-white" style={{ backgroundColor: "#1B4965", boxShadow: "0 2px 12px rgba(0,0,0,0.06)" }}>
-              <p className="text-xs font-semibold text-white/60 uppercase tracking-wider mb-1">Donor History</p>
-              <p className="text-2xl font-bold">{donation.history.count}</p>
-              <p className="text-xs text-white/60 mb-4">Total Donations</p>
-              <div className="border-t border-white/10 pt-3">
-                <p className="text-2xl font-bold" style={{ color: "#E8C110" }}>${donation.history.lifetime.toLocaleString()}</p>
-                <p className="text-xs text-white/60 mt-0.5">Lifetime Value</p>
-              </div>
-            </div>
-
-            <div className="bg-white rounded-xl border border-gray-100 p-5" style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.06)" }}>
-              <p className="font-bold text-gray-700 text-sm mb-4">Activity Log</p>
-              <div className="flex flex-col gap-4">
-                {[
-                  { label: "Thank You Sent",    date: "March 4, 2026 · 10:30 AM", color: "#4ADE80" },
-                  { label: "Items Cataloged",   date: "March 3, 2026 · 4:15 PM",  color: "#60A5FA" },
-                  { label: "Donation Received", date: "March 3, 2026 · 2:00 PM",  color: "#D1D5DB" },
-                ].map(({ label, date, color }) => (
-                  <div key={label} className="flex items-start gap-3">
-                    <div className="w-2 h-2 rounded-full mt-1.5 shrink-0" style={{ backgroundColor: color }} />
-                    <div>
-                      <p className="text-xs font-bold text-gray-700">{label}</p>
-                      <p className="text-xs text-gray-400 mt-0.5">{date}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
+          <div className="rounded-xl p-5 text-white h-fit shadow-md" style={{ backgroundColor: "#1B4965" }}>
+            <p className="text-xs font-semibold text-white/60 uppercase tracking-wide">Donor Profile</p>
+            <p className="text-2xl font-bold mt-2">{donation.history?.count || 1}</p>
+            <p className="text-xs text-white/60 mb-4">Total Donations Instance</p>
+            <p className="text-2xl font-bold" style={{ color: "#E8C110" }}>{donation.history?.totalBooks ?? sumBooks(donation.books)}</p>
+            <p className="text-xs text-white/60">Lifetime Books Donated</p>
           </div>
         </div>
       </div>
@@ -449,155 +584,63 @@ function DonorDetail({ donation, onEdit, onDelete, onBackToList }) {
   );
 }
 
-// ─── Page 4: Edit Donation ────────────────────────────────────────────────────
+// EditDonation
 function EditDonation({ donation, onCancel, onUpdate }) {
-  const [donationType, setDonationType] = useState(donation.type === "Books" ? "books" : "money");
-  const [form, setForm] = useState({
-    name: donation.donor, email: donation.email, phone: donation.phone,
-    desc: donation.itemDesc, qty: String(donation.qty), value: String(donation.value),
-    date: donation.date, notes: donation.notes, anon: false,
-  });
+  const [donor, setDonor] = useState({ donor_name: donation.donor_name, receive_by: donation.receive_by, donation_date: donation.donation_date });
+  const [books, setBooks] = useState(donation.books.map((b) => ({ ...b })));
 
-  return (
-    <div>
-      <Navbar title="Donations" breadcrumb="Donations › Donor Information › Edit" onBack={onCancel} />
-      <div className="px-6 py-5">
-
-        {/* Status Bar */}
-        <div className="flex items-center justify-between bg-white rounded-xl px-6 py-4 mb-5 border border-gray-100"
-          style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.06)" }}>
-          <div className="flex items-center gap-3">
-            <span className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-md"
-              style={{ backgroundColor: "#FFFDE7", color: "#B78103" }}>
-              <AlertCircle size={12} /> In Progress
-            </span>
-            <span className="text-xs font-bold tracking-wider" style={{ color: "#055E83" }}>#{donation.code}</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <button onClick={onCancel} className="text-xs font-bold text-gray-500 hover:text-gray-700 px-3 py-1.5 transition">Cancel</button>
-            <button onClick={onUpdate}
-              className="flex items-center gap-1.5 text-white text-xs font-bold px-5 py-2 rounded-lg hover:opacity-90 transition shadow-sm"
-              style={{ backgroundColor: "#1B4965" }}>
-              Update Donation
-            </button>
-          </div>
-        </div>
-
-        {/* Donor Info */}
-        <div className="bg-white rounded-xl border border-gray-100 overflow-hidden mb-4" style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.06)" }}>
-          <div className="flex items-center gap-2 px-6 py-4" style={{ backgroundColor: "#1B4965" }}>
-            <User size={14} className="text-[#E8C110]" />
-            <h3 className="text-white font-bold text-sm tracking-wide">Donor Information</h3>
-          </div>
-          <div className="p-6">
-            <div className="grid grid-cols-2 gap-4 mb-4">
-              <div>
-                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5 block">Donor Name</label>
-                <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#1B4965] transition" />
-              </div>
-              <div>
-                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5 block">Phone Number</label>
-                <input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#1B4965] transition" />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5 block">Email Address</label>
-                <input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#1B4965] transition" />
-              </div>
-              <div className="flex items-end pb-1">
-                <label className="flex items-center gap-2 text-sm text-gray-600 font-medium cursor-pointer">
-                  <input type="checkbox" checked={form.anon} onChange={(e) => setForm({ ...form, anon: e.target.checked })} className="w-4 h-4 accent-[#1B4965]" />
-                  Make donation anonymous
-                </label>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Donation Details */}
-        <div className="bg-white rounded-xl border border-gray-100 overflow-hidden" style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.06)" }}>
-          <div className="flex items-center gap-2 px-6 py-4" style={{ backgroundColor: "#1B4965" }}>
-            <BookOpen size={14} className="text-[#E8C110]" />
-            <h3 className="text-white font-bold text-sm tracking-wide">Donation Details</h3>
-          </div>
-          <div className="p-6">
-            <div className="mb-4">
-              <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 block">Donation Type</label>
-              <div className="grid grid-cols-2 gap-3">
-                <button onClick={() => setDonationType("books")}
-                  className={`flex items-center justify-center gap-2 py-2.5 rounded-lg border text-sm font-bold transition ${donationType === "books" ? "border-[#1B4965] bg-[#1B4965]/5 text-[#1B4965]" : "border-gray-200 text-gray-500 hover:border-gray-300"}`}>
-                  <BookOpen size={14} /> Books & Materials
-                </button>
-                <button onClick={() => setDonationType("money")}
-                  className={`flex items-center justify-center gap-2 py-2.5 rounded-lg border text-sm font-bold transition ${donationType === "money" ? "border-[#1B4965] bg-[#1B4965]/5 text-[#1B4965]" : "border-gray-200 text-gray-500 hover:border-gray-300"}`}>
-                  <DollarSign size={14} /> Financial Contribution
-                </button>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4 mb-4">
-              <div>
-                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5 block">Item Description</label>
-                <input value={form.desc} onChange={(e) => setForm({ ...form, desc: e.target.value })}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#1B4965] transition" />
-              </div>
-              <div>
-                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5 block">Quantity</label>
-                <input value={form.qty} onChange={(e) => setForm({ ...form, qty: e.target.value })}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#1B4965] transition" />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4 mb-4">
-              <div>
-                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5 block">Estimated Value (USD)</label>
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
-                  <input value={form.value} onChange={(e) => setForm({ ...form, value: e.target.value })}
-                    className="w-full border border-gray-200 rounded-lg pl-7 pr-3 py-2.5 text-sm outline-none focus:border-[#1B4965] transition" />
-                </div>
-              </div>
-              <div>
-                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5 block">Date Received</label>
-                <div className="relative">
-                  <Calendar size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                  <input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })}
-                    className="w-full border border-gray-200 rounded-lg pl-8 pr-3 py-2.5 text-sm outline-none focus:border-[#1B4965] transition" />
-                </div>
-              </div>
-            </div>
-            <div>
-              <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5 block">Additional Notes</label>
-              <textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })}
-                rows={3}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#1B4965] transition resize-none" />
-            </div>
-          </div>
-        </div>
-
-      </div>
-    </div>
-  );
-}
-
-// ─── Main Router ──────────────────────────────────────────────────────────────
-export default function Donations() {
-  const [page, setPage] = useState("list");
-  const [selectedDonation, setSelectedDonation] = useState(null);
-
-  const renderPage = () => {
-    if (page === "add") return <AddDonation onCancel={() => setPage("list")} onSave={() => setPage("list")} />;
-    if (page === "detail" && selectedDonation) return <DonorDetail donation={selectedDonation} onEdit={() => setPage("edit")} onDelete={() => setPage("list")} onBackToList={() => setPage("list")} />;
-    if (page === "edit" && selectedDonation) return <EditDonation donation={selectedDonation} onCancel={() => setPage("detail")} onUpdate={() => setPage("detail")} />;
-    return <DonationsList onAdd={() => setPage("add")} onView={(d) => { setSelectedDonation(d); setPage("detail"); }}onEdit={(d) => {setSelectedDonation(d);setPage("edit");}}  />;
+  const handleUpdate = () => {
+    onUpdate({ ...donation, ...donor, books, history: { ...donation.history, totalBooks: sumBooks(books) } });
   };
 
   return (
-    <div className="flex h-screen overflow-hidden antialiased">
+    <div>
+      <Navbar title="Donations" breadcrumb="Donations > Edit" onBack={onCancel} />
+      <div className="px-6 py-5 space-y-4">
+        <div className="flex items-center justify-between bg-white rounded-xl px-6 py-4 border shadow-sm">
+          <span className="text-xs font-bold" style={{ color: "#055E83" }}>Modifying Entry: #{donation.id}</span>
+          <div className="flex gap-2">
+            <button onClick={onCancel} className="text-xs font-bold text-gray-500 px-3 hover:text-gray-700 transition">Cancel</button>
+            <button onClick={handleUpdate} className="bg-[#1B4965] text-white text-xs font-bold px-5 py-2 rounded-lg hover:opacity-90 transition shadow-sm">Update Donation</button>
+          </div>
+        </div>
+        <div className="bg-white rounded-xl border p-6 grid grid-cols-3 gap-4 shadow-sm">
+          <div><Label>Donor Name</Label><input value={donor.donor_name} onChange={(e) => setDonor({ ...donor, donor_name: e.target.value })} className={inputCls} /></div>
+          <div><Label>Received By</Label><input value={donor.receive_by} onChange={(e) => setDonor({ ...donor, receive_by: e.target.value })} className={inputCls} /></div>
+          <div><Label>Donation Date</Label><input type="date" value={donor.donation_date} onChange={(e) => setDonor({ ...donor, donation_date: e.target.value })} className={inputCls} /></div>
+        </div>
+        <BooksSection books={books} setBooks={setBooks} />
+      </div>
+    </div>
+  );
+}
+
+// Root Router
+export default function Donations() {
+  const [page, setPage]                         = useState("list");
+  const [donationsList, setDonationsList]       = useState(INITIAL_DONATIONS);
+  const [selectedDonation, setSelectedDonation] = useState(null);
+
+  const handleView = (d) => { setSelectedDonation(d); setPage("detail"); };
+  const handleEdit = (d) => { setSelectedDonation(d); setPage("edit"); };
+
+  const renderPage = () => {
+    switch (page) {
+      case "add":
+        return <AddDonation onCancel={() => setPage("list")} onSave={(newRecord) => { setDonationsList((prev) => [newRecord, ...prev]); setPage("list"); }} />;
+      case "detail":
+        return <DonorDetail donation={selectedDonation} onEdit={() => setPage("edit")} onDelete={() => { setDonationsList((prev) => prev.filter((d) => d.id !== selectedDonation.id)); setPage("list"); }} onBackToList={() => setPage("list")} />;
+      case "edit":
+        return <EditDonation donation={selectedDonation} onCancel={() => setPage("detail")} onUpdate={(updatedRecord) => { setDonationsList((prev) => prev.map((d) => d.id === updatedRecord.id ? updatedRecord : d)); setSelectedDonation(updatedRecord); setPage("detail"); }} />;
+      default:
+        return <DonationsList data={donationsList} onAdd={() => setPage("add")} onView={handleView} onEdit={handleEdit} onDelete={(d) => setDonationsList((prev) => prev.filter((x) => x.id !== d.id))} />;
+    }
+  };
+
+  return (
+    <div className="flex h-screen overflow-hidden antialiased bg-[#F8FAFC]">
       <Sidebar />
-      <main className="flex-1 overflow-y-auto overflow-x-hidden bg-[#F8FAFC]">
+      <main className="flex-1 min-w-0 overflow-y-auto">
         {renderPage()}
       </main>
     </div>

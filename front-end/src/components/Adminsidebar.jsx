@@ -95,7 +95,7 @@ export default function Sidebar() {
       </div>
 
       {/* Navigation */}
-      <nav className="flex flex-col gap-1 px-2 py-4 flex-1 overflow-y-auto">
+      <nav className="flex flex-col gap-1 px-2 py-4 flex-1 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
         {navItems.map(({ label, icon: Icon, children, path }) => {
           const isActive = children
             ? children.some((c) => location.pathname === c.path)
