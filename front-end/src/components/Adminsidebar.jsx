@@ -33,43 +33,15 @@ const navItems = [
     label: "Reports",
     icon: BarChart2,
     children: [
-      {
-        label: "Entry Report",
-        icon: DoorOpen,
-        path: "/reports/entry-report",
-      },
-      {
-        label: "Borrow/Return Report",
-        icon: ArrowLeftRight,
-        path: "/reports/borrow-return",
-      },
-      {
-        label: "Popular Book Report",
-        icon: Star,
-        path: "/reports/popular-book",
-      },
-      {
-        label: "Book Inventory Report",
-        icon: BookOpen,
-        path: "/reports/book-inventory",
-      },
-      {
-        label: "Lost or Damaged Book Report",
-        icon: BookX,
-        path: "/reports/lost-damaged",
-      },
+      { label: "Entry Report", icon: DoorOpen, path: "/reports/entry-report" },
+      { label: "Borrow/Return Report", icon: ArrowLeftRight, path: "/reports/borrow-return" },
+      { label: "Popular Book Report", icon: Star, path: "/reports/popular-book" },
+      { label: "Book Inventory Report", icon: BookOpen, path: "/reports/book-inventory" },
+      { label: "Lost or Damaged Book Report", icon: BookX, path: "/reports/lost-damaged" },
       { label: "Fine Report", icon: Receipt, path: "/reports/fine" },
       { label: "Member Report", icon: Users, path: "/reports/member" },
-      {
-        label: "Staff Activity Report",
-        icon: UserCog,
-        path: "/reports/staff-activity",
-      },
-      {
-        label: "Daily / Monthly Transaction Report",
-        icon: CalendarRange,
-        path: "/reports/transactions",
-      },
+      { label: "Staff Activity Report", icon: UserCog, path: "/reports/staff-activity" },
+      { label: "Daily / Monthly Transaction Report", icon: CalendarRange, path: "/reports/transactions" },
     ],
   },
 ];
@@ -77,22 +49,26 @@ const navItems = [
 export default function Sidebar() {
   const navigate = useNavigate();
   const location = useLocation();
-  const [openMenus, setOpenMenus] = useState({ Reports: false });
+  // Manual overrides only. If a label has no entry here, fall back to "is a child active".
+  const [openOverrides, setOpenOverrides] = useState({});
 
   const toggleMenu = (label) =>
-    setOpenMenus((prev) => ({ ...prev, [label]: !prev[label] }));
+    setOpenOverrides((prev) => ({ ...prev, [label]: !getIsOpen(label) }));
+
+  const getIsOpen = (label) => {
+    const item = navItems.find((n) => n.label === label);
+    const childActive = item?.children?.some((c) => location.pathname === c.path);
+    // Manual click always wins once the user has touched it.
+    if (label in openOverrides) return openOverrides[label];
+    return !!childActive;
+  };
 
   return (
-    // Standard sidebar width: w-64 (256px)
     <aside className="flex flex-col h-screen w-64 bg-[#1B4965] text-white select-none font-sans overflow-hidden">
       {/* Logo / Brand */}
       <div className="flex items-center gap-3 px-4 py-5 border-b border-white/10">
         <div className="flex items-center justify-center w-14 h-14 rounded-xl bg-[#F5C842] flex-shrink-0 overflow-hidden">
-          <img
-            src={logo}
-            alt="Logo"
-            className="w-full h-full object-contain p-0"
-          />
+          <img src={logo} alt="Logo" className="w-full h-full object-contain p-0" />
         </div>
         <div className="leading-tight">
           <p className="text-base font-bold tracking-wide">Sieamreap</p>
@@ -106,7 +82,7 @@ export default function Sidebar() {
           const isActive = children
             ? children.some((c) => location.pathname === c.path)
             : location.pathname === path;
-          const isOpen = openMenus[label];
+          const isOpen = children ? getIsOpen(label) : false;
 
           return (
             <div key={label}>
@@ -134,9 +110,7 @@ export default function Sidebar() {
                   size={20}
                   strokeWidth={isActive ? 2.4 : 2}
                   className={`flex-shrink-0 transition-colors duration-200 ${
-                    isActive
-                      ? "text-[#1B4965]"
-                      : "text-white/70 group-hover:text-white"
+                    isActive ? "text-[#1B4965]" : "text-white/70 group-hover:text-white"
                   }`}
                 />
                 <span className="flex-1 truncate">{label}</span>
@@ -151,22 +125,17 @@ export default function Sidebar() {
               {/* Sub-menu */}
               {children && isOpen && (
                 <div className="mt-1 ml-3 flex flex-col gap-0.5 border-l border-white/10 pl-3">
-                  {children.map(
-                    ({
-                      label: childLabel,
-                      icon: ChildIcon,
-                      path: childPath,
-                    }) => {
-                      const isChildActive = location.pathname === childPath;
-                      return (
-                        <a
-                          key={childLabel}
-                          href="#"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            navigate(childPath);
-                          }}
-                          className={`
+                  {children.map(({ label: childLabel, icon: ChildIcon, path: childPath }) => {
+                    const isChildActive = location.pathname === childPath;
+                    return (
+                      <a
+                        key={childLabel}
+                        href="#"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          navigate(childPath);
+                        }}
+                        className={`
                           flex items-start gap-2.5 px-2.5 py-2 rounded-lg text-xs font-semibold
                           transition-all duration-200 group leading-snug
                           ${
@@ -175,17 +144,12 @@ export default function Sidebar() {
                               : "text-white/70 hover:text-white hover:bg-white/10"
                           }
                         `}
-                        >
-                          <ChildIcon
-                            size={16}
-                            strokeWidth={2}
-                            className="flex-shrink-0 mt-0.5"
-                          />
-                          <span className="flex-1">{childLabel}</span>
-                        </a>
-                      );
-                    },
-                  )}
+                      >
+                        <ChildIcon size={16} strokeWidth={2} className="flex-shrink-0 mt-0.5" />
+                        <span className="flex-1">{childLabel}</span>
+                      </a>
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -215,9 +179,7 @@ export default function Sidebar() {
             size={20}
             strokeWidth={location.pathname === "/settings" ? 2.4 : 2}
             className={`flex-shrink-0 transition-colors duration-200 ${
-              location.pathname === "/settings"
-                ? "text-[#1B4965]"
-                : "text-white/70 group-hover:text-white"
+              location.pathname === "/settings" ? "text-[#1B4965]" : "text-white/70 group-hover:text-white"
             }`}
           />
           Settings

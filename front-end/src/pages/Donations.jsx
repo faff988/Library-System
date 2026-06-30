@@ -2,7 +2,7 @@ import { useState, useMemo, useRef } from "react";
 import {
   Heart, BookOpen, Plus, Printer, Edit2, Trash2, User,
   Search, Filter, ArrowUpDown, ChevronLeft, ChevronRight,
-  Eye, Pencil, X, AlertCircle, Check, ImagePlus,
+  Eye, Pencil, X, AlertCircle, AlertTriangle, Check, ImagePlus,
 } from "lucide-react";
 import Sidebar from "../components/Adminsidebar";
 import Navbar from "../components/Navbar";
@@ -95,6 +95,31 @@ const AVATAR_COLORS = [
 ];
 
 const getAvatarColor = (name) => AVATAR_COLORS[name.charCodeAt(0) % AVATAR_COLORS.length];
+
+// ─── Delete Modal (matches Feedback page pattern) ──────────────────────────
+function DeleteModal({ donation, onCancel, onConfirm }) {
+  return (
+    <div className="fixed inset-0 bg-black/35 flex items-center justify-center z-50">
+      <div className="bg-white rounded-2xl p-8 w-80 text-center relative shadow-2xl">
+        <button onClick={onCancel} className="absolute top-3.5 right-3.5 text-gray-400 hover:text-gray-600 transition"><X size={18} /></button>
+        <div className="w-14 h-14 rounded-full bg-red-50 flex items-center justify-center mx-auto mb-4">
+          <Trash2 size={24} className="text-red-500" />
+        </div>
+        <h3 className="text-lg font-bold text-gray-800 mb-2">Delete Donation?</h3>
+        <p className="text-sm text-gray-500 mb-3 leading-relaxed">
+          This will permanently delete the donation record from "{donation.donor_name}" ({donation.id}) and all {sumBooks(donation.books)} associated book entries.
+        </p>
+        <div className="flex items-center gap-2 bg-yellow-50 border border-yellow-200 rounded-lg px-3 py-2 text-xs text-yellow-800 mb-5">
+          <AlertTriangle size={13} className="text-yellow-500 flex-shrink-0" /> This action cannot be undone.
+        </div>
+        <div className="flex gap-3">
+          <button onClick={onCancel} className="flex-1 py-2.5 rounded-lg border border-gray-200 text-sm font-bold text-gray-600 hover:bg-gray-50 transition">Cancel</button>
+          <button onClick={onConfirm} className="flex-1 py-2.5 rounded-lg bg-red-500 text-white text-sm font-bold hover:bg-red-600 transition">Yes, Delete</button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // BookDialog
 function BookDialog({ book, onSave, onClose }) {
@@ -326,7 +351,7 @@ function BooksSection({ books, setBooks }) {
 }
 
 // DonationsList
-function DonationsList({ data, onAdd, onView, onEdit, onDelete }) {
+function DonationsList({ data, onAdd, onView, onEdit, onDeleteClick }) {
   const [search, setSearch]           = useState("");
   const [status, setStatus]           = useState("All Status");
   const [currentPage, setCurrentPage] = useState(1);
@@ -427,7 +452,7 @@ function DonationsList({ data, onAdd, onView, onEdit, onDelete }) {
                       <div className="flex items-center justify-center gap-1.5">
                         <button onClick={() => onView(d)} className="flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-bold bg-[#1B4965] text-white hover:opacity-85 transition"><Eye size={12} /> View</button>
                         <button onClick={() => onEdit(d)} className="flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-bold bg-[#E8C110] text-[#1B4965] hover:opacity-85 transition"><Pencil size={12} /> Edit</button>
-                        <button onClick={() => onDelete(d)} className="flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-bold bg-red-50 text-red-500 hover:bg-red-100 transition"><Trash2 size={12} /> Delete</button>
+                        <button onClick={() => onDeleteClick(d)} className="flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-bold bg-red-50 text-red-500 hover:bg-red-100 transition"><Trash2 size={12} /> Delete</button>
                       </div>
                     </div>
                   );
@@ -503,7 +528,7 @@ function AddDonation({ onCancel, onSave }) {
 }
 
 // DonorDetail
-function DonorDetail({ donation, onEdit, onDelete, onBackToList }) {
+function DonorDetail({ donation, onEdit, onDeleteClick, onBackToList }) {
   if (!donation) return null;
 
   return (
@@ -523,7 +548,7 @@ function DonorDetail({ donation, onEdit, onDelete, onBackToList }) {
             <button onClick={onEdit} className="text-xs font-semibold flex items-center gap-1.5 px-3 py-1.5 rounded-lg hover:opacity-90 transition" style={{ backgroundColor: "#1B4965", color: "#fff" }}>
               <Edit2 size={13} /> Edit
             </button>
-            <button onClick={onDelete} className="text-xs font-semibold text-red-500 flex items-center gap-1.5 px-3 py-1.5 rounded-lg hover:bg-red-50 transition">
+            <button onClick={() => onDeleteClick(donation)} className="text-xs font-semibold text-red-500 flex items-center gap-1.5 px-3 py-1.5 rounded-lg hover:bg-red-50 transition">
               <Trash2 size={13} /> Delete
             </button>
           </div>
@@ -620,20 +645,31 @@ export default function Donations() {
   const [page, setPage]                         = useState("list");
   const [donationsList, setDonationsList]       = useState(INITIAL_DONATIONS);
   const [selectedDonation, setSelectedDonation] = useState(null);
+  const [deleteTarget, setDeleteTarget]         = useState(null);
 
   const handleView = (d) => { setSelectedDonation(d); setPage("detail"); };
   const handleEdit = (d) => { setSelectedDonation(d); setPage("edit"); };
+  const handleDeleteClick = (d) => { setDeleteTarget(d); };
+
+  const handleDeleteConfirm = () => {
+    setDonationsList((prev) => prev.filter((d) => d.id !== deleteTarget.id));
+    if (page === "detail" && selectedDonation?.id === deleteTarget.id) {
+      setSelectedDonation(null);
+      setPage("list");
+    }
+    setDeleteTarget(null);
+  };
 
   const renderPage = () => {
     switch (page) {
       case "add":
         return <AddDonation onCancel={() => setPage("list")} onSave={(newRecord) => { setDonationsList((prev) => [newRecord, ...prev]); setPage("list"); }} />;
       case "detail":
-        return <DonorDetail donation={selectedDonation} onEdit={() => setPage("edit")} onDelete={() => { setDonationsList((prev) => prev.filter((d) => d.id !== selectedDonation.id)); setPage("list"); }} onBackToList={() => setPage("list")} />;
+        return <DonorDetail donation={selectedDonation} onEdit={() => setPage("edit")} onDeleteClick={handleDeleteClick} onBackToList={() => setPage("list")} />;
       case "edit":
         return <EditDonation donation={selectedDonation} onCancel={() => setPage("detail")} onUpdate={(updatedRecord) => { setDonationsList((prev) => prev.map((d) => d.id === updatedRecord.id ? updatedRecord : d)); setSelectedDonation(updatedRecord); setPage("detail"); }} />;
       default:
-        return <DonationsList data={donationsList} onAdd={() => setPage("add")} onView={handleView} onEdit={handleEdit} onDelete={(d) => setDonationsList((prev) => prev.filter((x) => x.id !== d.id))} />;
+        return <DonationsList data={donationsList} onAdd={() => setPage("add")} onView={handleView} onEdit={handleEdit} onDeleteClick={handleDeleteClick} />;
     }
   };
 
@@ -643,6 +679,13 @@ export default function Donations() {
       <main className="flex-1 min-w-0 overflow-y-auto">
         {renderPage()}
       </main>
+      {deleteTarget && (
+        <DeleteModal
+          donation={deleteTarget}
+          onCancel={() => setDeleteTarget(null)}
+          onConfirm={handleDeleteConfirm}
+        />
+      )}
     </div>
   );
 }

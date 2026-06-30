@@ -132,6 +132,19 @@ function InfoChip({ icon: Icon, label, value }) {
   );
 }
 
+// ─── Event image / placeholder display (used in list cards + detail hero) ─────
+// Always fits the whole image inside the box without cropping or distortion.
+function EventImageDisplay({ image, category, height = "h-40" }) {
+  if (image) {
+    return (
+      <div className={`w-full ${height} bg-gray-50 flex items-center justify-center overflow-hidden`}>
+        <img src={image} alt={category} className="max-w-full max-h-full w-auto h-auto object-contain" />
+      </div>
+    );
+  }
+  return <EventImagePlaceholder category={category} height={height} />;
+}
+
 // ─── Image Upload Field ───────────────────────────────────────────────────────
 function ImageUpload({ value, onChange }) {
   const inputRef = useRef(null);
@@ -154,8 +167,11 @@ function ImageUpload({ value, onChange }) {
         Event Image
       </label>
       {value ? (
-        <div className="relative rounded-xl overflow-hidden border border-gray-200" style={{ height: 160 }}>
-          <img src={value} alt="Event" className="w-full h-full object-cover" />
+        <div
+          className="relative rounded-xl overflow-hidden border border-gray-200 bg-gray-50 flex items-center justify-center"
+          style={{ height: 160 }}
+        >
+          <img src={value} alt="Event" className="max-w-full max-h-full w-auto h-auto object-contain" />
           <button
             onClick={() => onChange(null)}
             className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/50 flex items-center justify-center text-white hover:bg-black/70 transition"
@@ -226,19 +242,13 @@ function EventList({ events, onView, onEdit, onCreateClick }) {
     // only the event cards column scrolls independently.
     <div className="flex gap-5 items-start" style={{ height: "calc(100vh - 130px)" }}>
 
-      {/* ── Scrollable main column ── */}
+      {/* ── Scrollable main grid ── */}
       <div className="flex-1 overflow-y-auto pr-1" style={{ height: "100%" }}>
-        {/* Event cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
         {events.map((ev) => (
-          <div key={ev.id} className="bg-white rounded-xl border border-dashed border-[#1B4965]/25 shadow-sm mb-4 overflow-hidden">
+          <div key={ev.id} className="bg-white rounded-xl border border-dashed border-[#1B4965]/25 shadow-sm overflow-hidden">
             {/* Image / placeholder */}
-            {ev.image ? (
-              <div className="w-full h-40 overflow-hidden">
-                <img src={ev.image} alt={ev.title} className="w-full h-full object-cover" />
-              </div>
-            ) : (
-              <EventImagePlaceholder category={ev.category} height="h-40" />
-            )}
+            <EventImageDisplay image={ev.image} category={ev.category} height="h-40" />
 
             <div className="p-5">
               <div className="flex items-start justify-between mb-3">
@@ -246,24 +256,9 @@ function EventList({ events, onView, onEdit, onCreateClick }) {
                   <CategoryBadge category={ev.category} />
                   <h3 className="text-lg font-bold text-[#1B4965] mt-2">{ev.title}</h3>
                 </div>
-                <div className="flex items-center gap-2 flex-shrink-0 ml-3">
-                  <button
-                    onClick={() => onEdit(ev)}
-                    className="flex items-center gap-1.5 text-xs font-bold text-[#1B4965] border border-[#1B4965]/30 px-3 py-1.5 rounded-lg hover:bg-blue-50 transition"
-                  >
-                    <Edit2 size={12} /> Edit
-                  </button>
-                  <button
-                    onClick={() => onView(ev)}
-                    className="flex items-center gap-1.5 text-xs font-bold text-white px-3 py-1.5 rounded-lg hover:opacity-90 transition"
-                    style={{ background: "#1B4965" }}
-                  >
-                    <Eye size={12} /> View Detail
-                  </button>
-                </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-y-1.5 text-sm text-gray-500 mb-3">
+              <div className="grid grid-cols-1 gap-y-1.5 text-sm text-gray-500 mb-3">
                 <span className="flex items-center gap-1.5"><Calendar size={13} className="text-gray-400" />{ev.date}</span>
                 <span className="flex items-center gap-1.5"><Clock size={13} className="text-gray-400" />{ev.time}</span>
                 <span className="flex items-center gap-1.5"><MapPin size={13} className="text-gray-400" />{ev.location}</span>
@@ -271,9 +266,26 @@ function EventList({ events, onView, onEdit, onCreateClick }) {
               </div>
 
               <ProgressBar joined={ev.joined} max={ev.maxAttendances} />
+
+              <div className="flex items-center gap-2 mt-4">
+                <button
+                  onClick={() => onEdit(ev)}
+                  className="flex-1 flex items-center justify-center gap-1.5 text-xs font-bold text-[#1B4965] border border-[#1B4965]/30 px-3 py-1.5 rounded-lg hover:bg-blue-50 transition"
+                >
+                  <Edit2 size={12} /> Edit
+                </button>
+                <button
+                  onClick={() => onView(ev)}
+                  className="flex-1 flex items-center justify-center gap-1.5 text-xs font-bold text-white px-3 py-1.5 rounded-lg hover:opacity-90 transition"
+                  style={{ background: "#1B4965" }}
+                >
+                  <Eye size={12} /> View Detail
+                </button>
+              </div>
             </div>
           </div>
         ))}
+        </div>
       </div>
 
       {/* ── Sticky sidebar (never scrolls) ── */}
@@ -334,13 +346,7 @@ function EventDetail({ event, onBack, onEdit }) {
         {/* Main content */}
         <div className="flex-1 bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
           {/* Image / placeholder hero */}
-          {event.image ? (
-            <div className="w-full h-56 overflow-hidden">
-              <img src={event.image} alt={event.title} className="w-full h-full object-cover" />
-            </div>
-          ) : (
-            <EventImagePlaceholder category={event.category} height="h-56" />
-          )}
+          <EventImageDisplay image={event.image} category={event.category} height="h-56" />
 
           <div className="bg-[#1B4965] px-6 py-4 flex items-center gap-2">
             <Tag size={16} className="text-[#E8C110]" />

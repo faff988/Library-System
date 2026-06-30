@@ -416,14 +416,6 @@ function ReplyView({ fb, onCancel, onSend }) {
       <div className="flex items-center justify-between bg-white rounded-xl px-6 py-4 border border-gray-100"
         style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.06)" }}>
         <div className="flex items-center gap-3">
-          {/* Back Arrow navigation shortcut */}
-          <button 
-            onClick={onCancel} 
-            className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500 mr-1 transition"
-            title="Back to Feedback List"
-          >
-            <ChevronLeft size={18} />
-          </button>
           <StatusBadge status={fb.status} />
           <span className="text-xs font-bold tracking-wider" style={{ color: "#055E83" }}>#{fb.id}</span>
         </div>
@@ -541,7 +533,11 @@ export default function FeedbackPage() {
     <div className="flex h-screen overflow-hidden antialiased">
       <Sidebar />
       <main className="flex-1 overflow-y-auto overflow-x-hidden bg-[#F8FAFC]">
-        <Navbar title="Feedback" breadcrumb={getBreadcrumb()} />
+        <Navbar
+          title="Feedback"
+          breadcrumb={getBreadcrumb()}
+          onBack={view !== "list" ? () => setView("list") : undefined}
+        />
         <div className="px-6 py-5">
           {view === "list" && <FeedbackList feedbacks={feedbacks} onView={handleView} onReply={handleReply} onDeleteClick={handleDeleteClick} />}
           {view === "detail" && selected && <FeedbackDetail fb={feedbacks.find((f) => f.id === selected.id) || selected} onReply={handleReply} onDeleteClick={handleDeleteClick} />}
