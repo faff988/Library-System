@@ -7,11 +7,8 @@ import Register from "./pages/auth/Register";
 // Core Pages
 import Dashboard from "./pages/Dashboard";
 import Donations from "./pages/Donations";
-import Inventory from "./pages/Inventory";
+import { Inventory, AddBook, BookDetails, EditBook } from "./pages/Inventory";
 import BorrowReturn from "./pages/BorrowReturn";
-import AddBook from "./pages/AddBook";
-import BookDetails from "./pages/BookDetails";
-import EditBook from "./pages/EditBook";
 import Event from "./pages/Event";
 import Member from "./pages/Member";
 import FeedBacks from "./pages/FeedBacks";
@@ -27,7 +24,6 @@ import EntryReport from "./pages/reports/EntryReport";
 import FineReport from "./pages/reports/FineReport";
 import LostDamagedReport from "./pages/reports/LostDamagedReport";
 import MemberReport from "./pages/reports/MemberReport";
-import PopularBookReport from "./pages/reports/PopularBookReport";
 import StaffActivityReport from "./pages/reports/StaffActivityReport";
 
 // import BorrowReturn from "./pages/Borrow-Return"; // COMMENTED OUT: File missing in file system
