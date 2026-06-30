@@ -1,0 +1,236 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+model books {
+  book_id          Int              @id @default(autoincrement())
+  title            String           @db.VarChar(255)
+  author           String           @db.VarChar(150)
+  dewey_code       String           @db.VarChar(20)
+  section          books_section
+  publication_year Int?
+  total_copies     Int?             @default(1)
+  available_copies Int?             @default(1)
+  is_borrowable    Boolean?         @default(true)
+  added_at         DateTime         @default(now()) @db.Timestamp(0)
+  borrow_records   borrow_records[]
+  damage_reports   damage_reports[]
+}
+
+model borrow_records {
+  borrow_id      Int                    @id @default(autoincrement())
+  member_id      Int
+  book_id        Int
+  issued_by      Int
+  borrow_date    DateTime               @default(now()) @db.Timestamp(0)
+  due_date       DateTime               @db.Date
+  return_date    DateTime?              @db.Timestamp(0)
+  status         borrow_records_status? @default(Borrowed)
+  members        members                @relation(fields: [member_id], references: [member_id], onUpdate: Restrict, map: "borrow_records_ibfk_1")
+  books          books                  @relation(fields: [book_id], references: [book_id], onUpdate: Restrict, map: "borrow_records_ibfk_2")
+  users          users                  @relation(fields: [issued_by], references: [user_id], onUpdate: Restrict, map: "borrow_records_ibfk_3")
+  damage_reports damage_reports[]
+
+  @@index([book_id], map: "book_id")
+  @@index([issued_by], map: "issued_by")
+  @@index([member_id], map: "member_id")
+}
+
+model damage_reports {
+  report_id          Int                           @id @default(autoincrement())
+  book_id            Int
+  borrow_id          Int
+  reported_by        Int
+  book_condition     damage_reports_book_condition @default(Damaged)
+  damage_description String?                       @db.Text
+  reported_at        DateTime                      @default(now()) @db.Timestamp(0)
+  books              books                         @relation(fields: [book_id], references: [book_id], onDelete: Cascade, onUpdate: Restrict, map: "fk_damage_book")
+  borrow_records     borrow_records                @relation(fields: [borrow_id], references: [borrow_id], onUpdate: Restrict, map: "fk_damage_borrow")
+  users              users                         @relation(fields: [reported_by], references: [user_id], onUpdate: Restrict, map: "fk_damage_reporter")
+
+  @@index([book_id], map: "book_id")
+  @@index([borrow_id], map: "borrow_id")
+  @@index([reported_by], map: "reported_by")
+}
+
+model donations {
+  donation_id     Int                     @id @default(autoincrement())
+  donor_name      String?                 @default("Anonymous") @db.VarChar(150)
+  amount          Decimal?                @db.Decimal(10, 2)
+  book_title      String?                 @db.VarChar(255)
+  book_author     String?                 @db.VarChar(150)
+  book_dewey_code String?                 @db.VarChar(20)
+  book_section    donations_book_section?
+  received_by     Int
+  donation_date   DateTime                @default(now()) @db.Timestamp(0)
+  users           users                   @relation(fields: [received_by], references: [user_id], onUpdate: Restrict, map: "donations_ibfk_1")
+
+  @@index([received_by], map: "received_by")
+}
+
+model events {
+  event_id       Int                   @id @default(autoincrement())
+  event_title    String                @db.VarChar(255)
+  event_category events_event_category
+  description    String?               @db.Text
+  event_date     DateTime              @db.Date
+  event_time     DateTime              @db.Time(0)
+  max_attendance Int?
+  event_image    String?               @db.VarChar(255)
+}
+
+model feedback {
+  feedback_id   Int              @id @default(autoincrement())
+  user_name     String?          @db.VarChar(50)
+  source        feedback_source
+  comment       String           @db.Text
+  rating        Int
+  feedback_date DateTime         @default(now()) @db.Timestamp(0)
+  status        feedback_status? @default(pending)
+}
+
+model library_entries {
+  entry_id      Int      @id @default(autoincrement())
+  attendee_name String   @db.VarChar(150)
+  age           Int
+  entry_time    DateTime @default(now()) @db.Timestamp(0)
+}
+
+model members {
+  member_id          Int               @id @default(autoincrement())
+  full_name          String            @db.VarChar(150)
+  date_of_birth      DateTime          @db.Date
+  phone_number       String?           @db.VarChar(15)
+  email              String            @unique(map: "email") @db.VarChar(100)
+  membership_type_id Int?
+  status             members_status?   @default(Active)
+  expiration_date    DateTime?         @db.Date
+  created_at         DateTime          @default(now()) @db.Timestamp(0)
+  borrow_records     borrow_records[]
+  membership_types   membership_types? @relation(fields: [membership_type_id], references: [membership_type_id], onDelete: Restrict, onUpdate: Restrict, map: "members_ibfk_1")
+
+  @@index([membership_type_id], map: "membership_type_id")
+}
+
+model membership_types {
+  membership_type_id  Int       @id @default(autoincrement())
+  type_name           String    @unique(map: "type_name") @db.VarChar(50)
+  max_books_allowed   Int
+  loan_duration_weeks Int       @default(2)
+  members             members[]
+}
+
+model notifications {
+  notification_id Int                          @id @default(autoincrement())
+  recipient_type  notifications_recipient_type @default(All_Staff)
+  recipient_id    Int?
+  title           String                       @db.VarChar(150)
+  message         String                       @db.Text
+  is_read         Boolean?                     @default(false)
+  created_at      DateTime                     @default(now()) @db.Timestamp(0)
+}
+
+model roles {
+  role_id   Int     @id @default(autoincrement())
+  role_name String  @unique(map: "role_name") @db.VarChar(50)
+  users     users[]
+}
+
+model system_logs {
+  log_id     Int      @id @default(autoincrement())
+  user_id    Int?
+  action     String   @db.VarChar(100)
+  table_name String   @db.VarChar(50)
+  record_id  Int?
+  details    String?  @db.Text
+  ip_address String?  @db.VarChar(45)
+  created_at DateTime @default(now()) @db.Timestamp(0)
+  users      users?   @relation(fields: [user_id], references: [user_id], onUpdate: Restrict, map: "fk_logs_user")
+
+  @@index([user_id], map: "fk_logs_user")
+}
+
+model users {
+  user_id        Int              @id @default(autoincrement())
+  first_name     String           @db.VarChar(50)
+  last_name      String           @db.VarChar(50)
+  email          String           @unique(map: "email") @db.VarChar(100)
+  phone_number   String?          @db.VarChar(15)
+  hash_password  String           @db.VarChar(255)
+  role_id        Int?
+  created_at     DateTime         @default(now()) @db.Timestamp(0)
+  is_active      Boolean?         @default(true)
+  borrow_records borrow_records[]
+  damage_reports damage_reports[]
+  donations      donations[]
+  system_logs    system_logs[]
+  roles          roles?           @relation(fields: [role_id], references: [role_id], onDelete: Restrict, onUpdate: Restrict, map: "users_ibfk_1")
+
+  @@index([role_id], map: "role_id")
+}
+
+enum notifications_recipient_type {
+  User
+  Member
+  All_Staff
+}
+
+enum events_event_category {
+  discussion
+  special
+  children
+  workshop
+}
+
+enum feedback_source {
+  book
+  event
+  general
+}
+
+enum books_section {
+  K1
+  KK1
+  E1
+  EK1
+  F1
+  FK1
+  Inter1
+}
+
+enum damage_reports_book_condition {
+  Fair
+  Damaged
+}
+
+enum donations_book_section {
+  K1
+  KK1
+  E1
+  EK1
+  F1
+  FK1
+  Inter1
+}
+
+enum feedback_status {
+  pending
+  replied
+}
+
+enum members_status {
+  Active
+  Suspended
+  Expired
+}
+
+enum borrow_records_status {
+  Borrowed
+  Returned
+  Overdue
+}
