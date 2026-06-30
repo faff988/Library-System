@@ -56,7 +56,7 @@ export default function App() {
       <Route path="/reports/lost-damaged" element={<LostDamagedReport />} />
       <Route path="/reports/borrow-return" element={<BorrowReturnReport />} />
       <Route path="/reports/transactions" element={<DailyWeeklyMonthlyTransactionReport />} />
-      <Route path="/reports/entry" element={<EntryReport />} />
+      <Route path="/reports/entry-report" element={<EntryReport />} />
       <Route path="/reports/fine" element={<FineReport />} />
       <Route path="/reports/member" element={<MemberReport />} />
       <Route path="/reports/staff-activity" element={<StaffActivityReport />} />

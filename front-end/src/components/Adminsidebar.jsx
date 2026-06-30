@@ -18,6 +18,7 @@ import {
   UserCog,
   CalendarRange,
   ChevronDown,
+  DoorOpen,
 } from "lucide-react";
 
 const navItems = [
@@ -32,6 +33,11 @@ const navItems = [
     label: "Reports",
     icon: BarChart2,
     children: [
+      {
+        label: "Entry Report",
+        icon: DoorOpen,
+        path: "/reports/entry-report",
+      },
       {
         label: "Borrow/Return Report",
         icon: ArrowLeftRight,
