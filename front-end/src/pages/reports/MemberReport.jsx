@@ -1,216 +1,58 @@
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import {
-  Calendar,
   CheckCircle2,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
   Clock3,
   FileDown,
-  Filter,
+  FileSpreadsheet,
   Printer,
-  Receipt,
   RotateCcw,
   Search,
-  Table as TableIcon,
   Users,
+  UserX,
 } from "lucide-react";
 import Navbar from "../../components/Navbar";
-import Sidebar from "../../components/Adminsidebar";
+import api from "../../utils/api";
 
 const PAGE_SIZE = 4;
-const DEFAULT_FILTERS = {
-  date: "Registration Date",
-  type: "Member Type",
-  status: "Status",
+
+const STATUS_OPTIONS = ["All Status", "Active", "Expired", "Suspended"];
+
+const statusBadgeStyle = {
+  Active: { backgroundColor: "#DCFCE7", color: "#16A34A" },
+  Expired: { backgroundColor: "#F1F5F9", color: "#64748B" },
+  Suspended: { backgroundColor: "#FFEDD5", color: "#EA580C" },
 };
 
-const members = [
-  {
-    id: "MB-2024-001",
-    name: "Chivon Sophea",
-    email: "sophea.ch@email.com",
-    initials: "CS",
-    avatarClass: "bg-blue-100 text-blue-600",
-    membership: "Premium",
-    status: "Active",
-    borrowed: 12,
-    overdue: 2,
-    totalFines: 15,
-    registeredDate: "Oct 02, 2023",
-  },
-  {
-    id: "MB-2024-042",
-    name: "Leakena Rath",
-    email: "r.leakena@domain.kh",
-    initials: "LR",
-    avatarClass: "bg-purple-100 text-purple-600",
-    membership: "Basic",
-    status: "Active",
-    borrowed: 45,
-    overdue: 0,
-    totalFines: 0,
-    registeredDate: "Oct 08, 2023",
-  },
-  {
-    id: "MB-2023-882",
-    name: "Serey Mesa",
-    email: "mesa.serey@email.com",
-    initials: "SM",
-    avatarClass: "bg-orange-100 text-orange-600",
-    membership: "Premium",
-    status: "Expired",
-    borrowed: 5,
-    overdue: 0,
-    totalFines: 2.5,
-    registeredDate: "Sep 20, 2023",
-  },
-  {
-    id: "MB-2024-115",
-    name: "Kosal Dara",
-    email: "dara.k@school.edu",
-    initials: "KD",
-    avatarClass: "bg-pink-100 text-pink-600",
-    membership: "Premium",
-    status: "Active",
-    borrowed: 108,
-    overdue: 1,
-    totalFines: 5,
-    registeredDate: "Oct 18, 2023",
-  },
-  {
-    id: "MB-2024-154",
-    name: "Mony Rotha",
-    email: "mony.rotha@email.com",
-    initials: "MR",
-    avatarClass: "bg-indigo-100 text-indigo-600",
-    membership: "Basic",
-    status: "Active",
-    borrowed: 31,
-    overdue: 0,
-    totalFines: 0,
-    registeredDate: "Oct 22, 2023",
-  },
-  {
-    id: "MB-2024-203",
-    name: "Nita Long",
-    email: "nita.long@email.com",
-    initials: "NL",
-    avatarClass: "bg-rose-100 text-rose-600",
-    membership: "Premium",
-    status: "Suspended",
-    borrowed: 18,
-    overdue: 3,
-    totalFines: 26,
-    registeredDate: "Nov 01, 2023",
-  },
-  {
-    id: "MB-2024-274",
-    name: "Chan Vanny",
-    email: "chan.vanny@email.com",
-    initials: "CV",
-    avatarClass: "bg-cyan-100 text-cyan-700",
-    membership: "Basic",
-    status: "Active",
-    borrowed: 64,
-    overdue: 0,
-    totalFines: 0,
-    registeredDate: "Nov 05, 2023",
-  },
-  {
-    id: "MB-2024-318",
-    name: "Lina Mao",
-    email: "lina.mao@email.com",
-    initials: "LM",
-    avatarClass: "bg-amber-100 text-amber-700",
-    membership: "Basic",
-    status: "Active",
-    borrowed: 22,
-    overdue: 1,
-    totalFines: 8,
-    registeredDate: "Nov 12, 2023",
-  },
-];
+function formatNumber(value) {
+  return new Intl.NumberFormat("en-US").format(value ?? 0);
+}
 
-const metricCards = [
-  {
-    title: "Total Members",
-    value: "12,482",
-    note: "+4.5%",
-    icon: Users,
-    iconClass: "bg-blue-50 text-blue-600",
-    noteClass: "bg-emerald-50 text-emerald-600",
-  },
-  {
-    title: "Active Members",
-    value: "10,240",
-    note: "82% Rate",
-    icon: CheckCircle2,
-    iconClass: "bg-emerald-50 text-emerald-600",
-    noteClass: "text-slate-400",
-  },
-  {
-    title: "Overdue Books",
-    value: "342",
-    note: "High",
-    icon: Clock3,
-    iconClass: "bg-red-50 text-red-500",
-    noteClass: "bg-red-50 text-red-600",
-  },
-  {
-    title: "Total Fines Collected",
-    value: "$1,240.50",
-    note: "This Month",
-    icon: Receipt,
-    iconClass: "bg-[#FFF4CC] text-[#A06E00]",
-    noteClass: "text-slate-400",
-  },
-];
-
-const dateOptions = ["Registration Date", "Oct 2023", "Nov 2023", "Sep 2023"];
-const typeOptions = ["Member Type", "Premium", "Basic"];
-const statusOptions = ["Status", "Active", "Expired", "Suspended"];
-
-function formatCurrency(value) {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-  }).format(value);
+function formatDate(value) {
+  if (!value) return "—";
+  return new Date(value).toLocaleDateString("en-US", { month: "short", day: "2-digit", year: "numeric" });
 }
 
 function escapeCsvValue(value) {
-  return `"${String(value).replace(/"/g, '""')}"`;
+  return `"${String(value ?? "").replace(/"/g, '""')}"`;
 }
 
 function downloadMemberCsv(rows) {
-  const headers = [
-    "Member ID",
-    "Full Name",
-    "Email",
-    "Membership",
-    "Status",
-    "Borrowed",
-    "Overdue",
-    "Total Fines",
-    "Registration Date",
-  ];
+  const headers = ["Member ID", "Full Name", "Email", "Membership Type", "Status", "Total Borrows", "Registered Date"];
   const csvRows = rows.map((row) => [
-    row.id,
-    row.name,
-    row.email,
-    row.membership,
+    row.member_id,
+    row.full_name,
+    row.email || "",
+    row.membership_type || "",
     row.status,
-    row.borrowed,
-    row.overdue,
-    formatCurrency(row.totalFines),
-    row.registeredDate,
+    row.totalBorrows,
+    row.created_at,
   ]);
-  const csv = [headers, ...csvRows]
-    .map((row) => row.map(escapeCsvValue).join(","))
-    .join("\n");
+  const csv = [headers, ...csvRows].map((row) => row.map(escapeCsvValue).join(",")).join("\n");
   const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8;" }));
   const link = document.createElement("a");
-
   link.href = url;
   link.download = "member-report.csv";
   link.click();
@@ -219,71 +61,123 @@ function downloadMemberCsv(rows) {
 
 function MetricCard({ card }) {
   const Icon = card.icon;
-
   return (
-    <article className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-      <div className="flex items-start justify-between gap-4">
-        <span className={`flex h-9 w-9 items-center justify-center rounded-md ${card.iconClass}`}>
-          <Icon size={18} />
-        </span>
-        <span className={`rounded px-2 py-1 text-[10px] font-black ${card.noteClass}`}>
-          {card.note}
-        </span>
+    <div className="bg-white rounded-xl px-4 py-4 border border-gray-100 shadow-3xs flex flex-col gap-3">
+      <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ backgroundColor: card.iconBg, color: card.iconColor }}>
+        <Icon size={17} />
       </div>
-      <p className="mt-4 text-sm font-medium text-slate-500">{card.title}</p>
-      <h3 className="mt-1 text-2xl font-black tracking-normal text-slate-900">{card.value}</h3>
-    </article>
+      <div>
+        <p className="text-[11px] font-semibold text-gray-400 mb-1">{card.title}</p>
+        <p className="text-xl font-black leading-tight text-gray-900">{card.value}</p>
+        {card.sub && <p className="text-[11px] mt-1 font-semibold" style={{ color: card.subColor }}>{card.sub}</p>}
+      </div>
+    </div>
   );
 }
 
-function SelectFilter({ value, onChange, options, ariaLabel }) {
+function SelectFilter({ icon: Icon, value, onChange, options, ariaLabel }) {
   return (
-    <label className="relative block">
+    <label className="relative block min-w-[150px]">
+      <Icon size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
       <select
         aria-label={ariaLabel}
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="h-10 w-full min-w-40 appearance-none rounded-md border border-slate-200 bg-slate-50 px-4 pr-9 text-xs font-bold text-slate-600 outline-none transition focus:border-[#005A76] focus:bg-white focus:ring-2 focus:ring-[#005A76]/10"
+        className="h-10 w-full appearance-none rounded-lg border border-gray-200 bg-white pl-9 pr-8 text-xs font-semibold text-gray-600 shadow-3xs outline-none transition hover:bg-gray-50 focus:border-[#055E83] focus:ring-2 focus:ring-[#055E83]/10"
       >
         {options.map((option) => (
-          <option key={option}>{option}</option>
+          <option key={option.value ?? option} value={option.value ?? option}>
+            {option.label ?? option}
+          </option>
         ))}
       </select>
-      <ChevronDown
-        size={15}
-        className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-500"
-      />
+      <ChevronDown size={14} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" />
     </label>
   );
 }
 
-function StatusCell({ status }) {
-  const styles = {
-    Active: "bg-emerald-500 text-emerald-600",
-    Expired: "bg-slate-400 text-slate-500",
-    Suspended: "bg-amber-500 text-amber-600",
-  };
-  const className = styles[status] || styles.Expired;
+function ExportButton({ icon: Icon, children, variant = "light", ...props }) {
+  const className =
+    variant === "primary"
+      ? "bg-[#055E83] text-white hover:bg-[#044A69] active:scale-[0.98]"
+      : "border border-gray-200 bg-white text-gray-600 shadow-3xs hover:bg-gray-50 active:scale-[0.98]";
 
   return (
-    <span className="inline-flex items-center gap-2 text-xs font-semibold text-slate-600">
-      <span className={`h-2 w-2 rounded-full ${className.split(" ")[0]}`} />
-      <span className={className.split(" ")[1]}>{status}</span>
-    </span>
+    <button
+      type="button"
+      className={`inline-flex h-10 items-center justify-center gap-2 rounded-lg px-4 text-xs font-bold transition-all duration-150 disabled:cursor-not-allowed disabled:opacity-40 disabled:active:scale-100 ${className}`}
+      {...props}
+    >
+      <Icon size={15} />
+      {children}
+    </button>
   );
 }
 
 export default function MemberReport() {
   const [headerSearch, setHeaderSearch] = useState("");
   const [tableSearch, setTableSearch] = useState("");
-  const [filters, setFilters] = useState(DEFAULT_FILTERS);
+  const [membershipType, setMembershipType] = useState("All Types");
+  const [status, setStatus] = useState("All Status");
   const [showMoreFilters, setShowMoreFilters] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [toast, setToast] = useState("");
 
-  const setFilter = (key) => (value) => {
-    setFilters((current) => ({ ...current, [key]: value }));
-    setCurrentPage(1);
+  const [allMembers, setAllMembers] = useState([]);
+  const [totalMembers, setTotalMembers] = useState(0);
+  const [byStatus, setByStatus] = useState({});
+  const [loading, setLoading] = useState(true);
+
+  const [membershipTypes, setMembershipTypes] = useState([]);
+
+  const [bookStats, setBookStats] = useState(null);
+
+  useEffect(() => {
+    fetchMembers();
+  }, [status]);
+
+  useEffect(() => {
+    fetchMembershipTypes();
+    fetchBookStats();
+  }, []);
+
+  const fetchMembers = async () => {
+    try {
+      setLoading(true);
+      const params = new URLSearchParams();
+      if (status !== "All Status") params.append("status", status);
+
+      const response = await api.get(`/reports/members?${params.toString()}`);
+      if (response.data?.success) {
+        setAllMembers(response.data.data.members);
+        setTotalMembers(response.data.data.totalMembers);
+        setByStatus(response.data.data.byStatus || {});
+      }
+    } catch (err) {
+      console.error("Failed to load member report:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchMembershipTypes = async () => {
+    try {
+      const response = await api.get("/membership-types");
+      if (response.data?.success) setMembershipTypes(response.data.data);
+    } catch (err) {
+      console.error("Failed to load membership types:", err);
+    }
+  };
+
+  // /books/stats already computes a global overdueCount, reused here since
+  // /reports/members has no equivalent overdue figure of its own.
+  const fetchBookStats = async () => {
+    try {
+      const response = await api.get("/books/stats");
+      if (response.data?.success) setBookStats(response.data.data);
+    } catch (err) {
+      console.error("Failed to load book stats:", err);
+    }
   };
 
   const showMessage = (message) => {
@@ -291,21 +185,19 @@ export default function MemberReport() {
     setTimeout(() => setToast(""), 2200);
   };
 
-  const filteredMembers = useMemo(() => {
+  // /reports/members has no search or membershipTypeId-name filter (only
+  // membershipTypeId, which the UI doesn't track), so both are applied
+  // client-side over the already-fetched (status-filtered) set.
+  const filteredMembers = allMembers.filter((member) => {
     const headerQuery = headerSearch.trim().toLowerCase();
     const tableQuery = tableSearch.trim().toLowerCase();
+    const searchableText = `${member.member_id} ${member.full_name} ${member.email || ""} ${member.membership_type || ""} ${member.status}`.toLowerCase();
+    const matchesHeader = !headerQuery || searchableText.includes(headerQuery);
+    const matchesTable = !tableQuery || searchableText.includes(tableQuery);
+    const matchesType = membershipType === "All Types" || member.membership_type === membershipType;
 
-    return members.filter((member) => {
-      const searchableText = `${member.id} ${member.name} ${member.email} ${member.membership} ${member.status} ${member.borrowed} ${member.overdue} ${member.registeredDate}`.toLowerCase();
-      const matchesHeader = !headerQuery || searchableText.includes(headerQuery);
-      const matchesTable = !tableQuery || searchableText.includes(tableQuery);
-      const matchesDate = filters.date === "Registration Date" || member.registeredDate.includes(filters.date);
-      const matchesType = filters.type === "Member Type" || member.membership === filters.type;
-      const matchesStatus = filters.status === "Status" || member.status === filters.status;
-
-      return matchesHeader && matchesTable && matchesDate && matchesType && matchesStatus;
-    });
-  }, [filters, headerSearch, tableSearch]);
+    return matchesHeader && matchesTable && matchesType;
+  });
 
   const pageCount = Math.max(1, Math.ceil(filteredMembers.length / PAGE_SIZE));
   const safePage = Math.min(currentPage, pageCount);
@@ -314,19 +206,56 @@ export default function MemberReport() {
   const showingEnd = Math.min(safePage * PAGE_SIZE, filteredMembers.length);
 
   const resetFilters = () => {
-    setFilters(DEFAULT_FILTERS);
+    setHeaderSearch("");
     setTableSearch("");
+    setMembershipType("All Types");
+    setStatus("All Status");
     setCurrentPage(1);
     showMessage("Filters reset");
   };
 
-  return (
-    <div className="flex h-screen overflow-hidden bg-[#E4ECF5]">
-      <Sidebar />
+  const metricCards = [
+    {
+      title: "Total Members",
+      value: formatNumber(totalMembers),
+      icon: Users,
+      iconBg: "#DBEAFE",
+      iconColor: "#2563EB",
+    },
+    {
+      title: "Active Members",
+      value: formatNumber(byStatus.Active || 0),
+      sub: totalMembers ? `${Math.round(((byStatus.Active || 0) / totalMembers) * 100)}% of total members` : undefined,
+      subColor: "#71717A",
+      icon: CheckCircle2,
+      iconBg: "#DCFCE7",
+      iconColor: "#16A34A",
+    },
+    {
+      title: "Overdue Books",
+      value: bookStats ? formatNumber(bookStats.overdueCount) : "—",
+      sub: bookStats?.overdueCount > 0 ? "High priority" : undefined,
+      subColor: "#DC2626",
+      icon: Clock3,
+      iconBg: "#FEE2E2",
+      iconColor: "#DC2626",
+    },
+    {
+      title: "Suspended Members",
+      value: formatNumber(byStatus.Suspended || 0),
+      icon: UserX,
+      iconBg: "#FFEDD5",
+      iconColor: "#EA580C",
+    },
+  ];
 
-      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+  const typeOptions = ["All Types", ...membershipTypes.map((t) => t.type_name)];
+
+  return (
+    <div className="flex-1 bg-[#E9EEF4]">
         <Navbar
           title="Member Report"
+          breadcrumb="View and analyze member records"
           onBack={() => window.history.back()}
           searchValue={headerSearch}
           onSearchChange={(value) => {
@@ -336,184 +265,152 @@ export default function MemberReport() {
           searchPlaceholder="Search books, member..."
         />
 
-        <main className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8">
+        <div className="px-6 py-5 space-y-5">
           {toast && (
-            <div className="fixed bottom-6 right-6 z-50 rounded bg-[#005A76] px-4 py-3 text-sm font-bold text-white shadow-lg">
+            <div className="fixed bottom-6 right-6 z-50 rounded-lg bg-[#055E83] px-4 py-3 text-sm font-bold text-white shadow-lg">
               {toast}
             </div>
           )}
 
-          <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
             {metricCards.map((card) => (
               <MetricCard key={card.title} card={card} />
             ))}
-          </section>
+          </div>
 
-          <section className="mt-5 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
-              <div className="flex flex-col gap-3 md:flex-row md:flex-wrap">
-                <SelectFilter
-                  value={filters.date}
-                  onChange={setFilter("date")}
-                  options={dateOptions}
-                  ariaLabel="Registration date"
-                />
-                <SelectFilter
-                  value={filters.type}
-                  onChange={setFilter("type")}
-                  options={typeOptions}
-                  ariaLabel="Member type"
-                />
-                <SelectFilter
-                  value={filters.status}
-                  onChange={setFilter("status")}
-                  options={statusOptions}
-                  ariaLabel="Status"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowMoreFilters((visible) => !visible)}
-                  className="inline-flex h-10 items-center gap-2 rounded-md border border-slate-200 bg-white px-4 text-xs font-bold text-slate-600 transition hover:border-[#005A76] hover:text-[#005A76]"
-                >
-                  <Filter size={15} />
-                  More Filters
-                </button>
-                <button
-                  type="button"
-                  onClick={resetFilters}
-                  className="inline-flex h-10 items-center gap-2 rounded-md border border-slate-200 bg-white px-4 text-xs font-bold text-slate-600 transition hover:border-[#005A76] hover:text-[#005A76]"
-                >
-                  <RotateCcw size={15} />
-                  Reset
-                </button>
-              </div>
-
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => window.print()}
-                  className="inline-flex h-10 items-center gap-2 rounded-md border border-slate-200 bg-white px-4 text-xs font-bold text-slate-700 transition hover:border-[#005A76] hover:text-[#005A76]"
-                >
-                  <Printer size={15} />
-                  Print
-                </button>
-                <button
-                  type="button"
-                  onClick={() => window.print()}
-                  className="inline-flex h-10 items-center gap-2 rounded-md bg-[#005A76] px-4 text-xs font-bold text-white shadow-sm transition hover:bg-[#00445a]"
-                >
-                  <FileDown size={15} />
-                  Export PDF
-                </button>
-                <button
-                  type="button"
-                  disabled={filteredMembers.length === 0}
-                  onClick={() => {
-                    downloadMemberCsv(filteredMembers);
-                    showMessage("Member report exported");
-                  }}
-                  className="inline-flex h-10 items-center gap-2 rounded-md border border-slate-200 bg-white px-4 text-xs font-bold text-slate-700 transition hover:border-[#005A76] hover:text-[#005A76] disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <TableIcon size={15} />
-                  Excel
-                </button>
-              </div>
+          <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              <SelectFilter
+                icon={Users}
+                value={membershipType}
+                onChange={(value) => { setMembershipType(value); setCurrentPage(1); }}
+                options={typeOptions}
+                ariaLabel="Member type"
+              />
+              <SelectFilter
+                icon={CheckCircle2}
+                value={status}
+                onChange={(value) => { setStatus(value); setCurrentPage(1); }}
+                options={STATUS_OPTIONS}
+                ariaLabel="Status"
+              />
             </div>
 
-            {showMoreFilters && (
-              <div className="mt-4 max-w-sm">
-                <label className="relative block">
-                  <Search
-                    size={15}
-                    className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
-                  />
-                  <input
-                    type="search"
-                    value={tableSearch}
-                    onChange={(event) => {
-                      setTableSearch(event.target.value);
-                      setCurrentPage(1);
-                    }}
-                    placeholder="Filter by member ID, email, or fines..."
-                    className="h-10 w-full rounded-md border border-slate-200 bg-slate-50 pl-9 pr-3 text-xs font-bold text-slate-600 outline-none transition focus:border-[#005A76] focus:bg-white"
-                  />
-                </label>
-              </div>
-            )}
-          </section>
+            <div className="flex flex-wrap gap-2">
+              <ExportButton icon={Search} onClick={() => setShowMoreFilters((visible) => !visible)}>More Filters</ExportButton>
+              <ExportButton icon={RotateCcw} onClick={resetFilters}>Reset</ExportButton>
+              <ExportButton icon={Printer} onClick={() => window.print()}>Print</ExportButton>
+              <ExportButton icon={FileDown} variant="primary" onClick={() => window.print()}>Export PDF</ExportButton>
+              <ExportButton
+                icon={FileSpreadsheet}
+                onClick={() => {
+                  filteredMembers.length
+                    ? (downloadMemberCsv(filteredMembers), showMessage("Member report exported"))
+                    : showMessage("No member records to export");
+                }}
+                disabled={filteredMembers.length === 0}
+              >
+                Excel
+              </ExportButton>
+            </div>
+          </div>
 
-          <section className="mt-5 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+          {showMoreFilters && (
+            <div className="max-w-sm">
+              <label className="relative block">
+                <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                <input
+                  type="search"
+                  value={tableSearch}
+                  onChange={(event) => {
+                    setTableSearch(event.target.value);
+                    setCurrentPage(1);
+                  }}
+                  placeholder="Filter by member ID, name, or email..."
+                  className="h-10 w-full rounded-lg border border-gray-200 bg-white pl-9 pr-3 text-xs font-semibold text-gray-600 shadow-3xs outline-none transition focus:border-[#055E83] focus:ring-2 focus:ring-[#055E83]/10"
+                />
+              </label>
+            </div>
+          )}
+
+          <div className="bg-white rounded-xl border border-gray-100 shadow-3xs overflow-hidden">
+            <div className="border-b border-gray-100 px-5 py-4">
+              <h3 className="text-sm font-bold text-gray-800">Member Records</h3>
+              <p className="mt-1 text-xs font-semibold text-gray-400">Borrowing activity per member</p>
+            </div>
+
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[880px] text-left">
-                <thead className="bg-slate-100 text-[11px] uppercase tracking-wide text-slate-500">
+              <table className="w-full min-w-[820px] text-left">
+                <thead className="sticky top-0 z-[1] bg-gray-50/90 backdrop-blur text-[10px] uppercase tracking-wider text-gray-400">
                   <tr>
-                    <th className="px-5 py-4 font-black">Member ID</th>
-                    <th className="px-5 py-4 font-black">Full Name</th>
-                    <th className="px-5 py-4 font-black">Membership</th>
-                    <th className="px-5 py-4 font-black">Status</th>
-                    <th className="px-5 py-4 text-center font-black">Borrowed</th>
-                    <th className="px-5 py-4 text-center font-black">Overdue</th>
-                    <th className="px-5 py-4 text-right font-black">Total Fines</th>
+                    <th className="px-5 py-3.5 font-bold">Member ID</th>
+                    <th className="px-5 py-3.5 font-bold">Full Name</th>
+                    <th className="px-5 py-3.5 font-bold">Membership</th>
+                    <th className="px-5 py-3.5 font-bold">Status</th>
+                    <th className="px-5 py-3.5 text-center font-bold">Total Borrows</th>
+                    <th className="px-5 py-3.5 font-bold">Registered</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-200 text-sm">
-                  {visibleMembers.map((member) => (
-                    <tr key={member.id} className="transition hover:bg-slate-50">
-                      <td className="px-5 py-4 font-semibold text-slate-700">{member.id}</td>
-                      <td className="px-5 py-4">
-                        <div className="flex items-center gap-3">
-                          <span className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-[10px] font-black ${member.avatarClass}`}>
-                            {member.initials}
-                          </span>
-                          <span className="min-w-0">
-                            <span className="block truncate font-black leading-tight text-slate-800">
-                              {member.name}
-                            </span>
-                            <span className="mt-0.5 block truncate text-[11px] font-medium text-slate-400">
-                              {member.email}
-                            </span>
-                          </span>
-                        </div>
-                      </td>
-                      <td className="px-5 py-4">
-                        <span className="rounded bg-slate-200 px-2.5 py-1 text-[10px] font-black text-slate-700">
-                          {member.membership}
-                        </span>
-                      </td>
-                      <td className="px-5 py-4">
-                        <StatusCell status={member.status} />
-                      </td>
-                      <td className="px-5 py-4 text-center font-semibold text-slate-800">{member.borrowed}</td>
-                      <td className={`px-5 py-4 text-center font-black ${member.overdue > 0 ? "text-red-500" : "text-slate-800"}`}>
-                        {member.overdue}
-                      </td>
-                      <td className="px-5 py-4 text-right font-semibold text-slate-900">
-                        {formatCurrency(member.totalFines)}
-                      </td>
-                    </tr>
-                  ))}
-
-                  {!visibleMembers.length && (
+                <tbody className="divide-y divide-gray-100 text-sm">
+                  {loading ? (
                     <tr>
-                      <td colSpan={7} className="px-5 py-12 text-center text-sm font-semibold text-slate-400">
-                        No member records found.
+                      <td colSpan={6} className="px-5 py-16 text-center text-sm font-semibold text-gray-400">
+                        Loading members...
                       </td>
                     </tr>
+                  ) : visibleMembers.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="px-5 py-16 text-center">
+                        <p className="text-sm font-bold text-gray-500">No member records found</p>
+                        <p className="mt-1 text-xs font-medium text-gray-400">Try adjusting your filters or search terms</p>
+                      </td>
+                    </tr>
+                  ) : (
+                    visibleMembers.map((member) => (
+                      <tr key={member.member_id} className="transition-colors hover:bg-gray-50/80">
+                        <td className="px-5 py-4 text-xs font-bold text-[#055E83]">#{member.member_id}</td>
+                        <td className="px-5 py-4">
+                          <span className="min-w-0">
+                            <span className="block truncate font-bold leading-tight text-gray-800">{member.full_name}</span>
+                            <span className="mt-0.5 block truncate text-[11px] font-semibold text-gray-400">{member.email || "—"}</span>
+                          </span>
+                        </td>
+                        <td className="px-5 py-4">
+                          <span className="inline-flex rounded-full bg-gray-100 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-gray-600">
+                            {member.membership_type || "None"}
+                          </span>
+                        </td>
+                        <td className="px-5 py-4">
+                          <span
+                            className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide"
+                            style={statusBadgeStyle[member.status] || statusBadgeStyle.Expired}
+                          >
+                            <span
+                              className="h-1.5 w-1.5 rounded-full"
+                              style={{ backgroundColor: (statusBadgeStyle[member.status] || statusBadgeStyle.Expired).color }}
+                            />
+                            {member.status}
+                          </span>
+                        </td>
+                        <td className="px-5 py-4 text-center text-xs font-bold text-gray-800">{member.totalBorrows}</td>
+                        <td className="px-5 py-4 text-xs font-semibold text-gray-600">{formatDate(member.created_at)}</td>
+                      </tr>
+                    ))
                   )}
                 </tbody>
               </table>
             </div>
 
-            <div className="flex flex-col gap-3 border-t border-slate-200 bg-slate-50 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-              <p className="text-xs font-semibold text-slate-500">
-                Showing {showingStart} to {showingEnd} of {filteredMembers.length} members
+            <div className="flex flex-col gap-3 border-t border-gray-100 bg-white px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-xs font-semibold text-gray-500">
+                Showing {showingStart}-{showingEnd} of {filteredMembers.length} members
               </p>
               <div className="flex items-center gap-1">
                 <button
                   type="button"
                   onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
                   disabled={safePage === 1}
-                  className="flex h-8 w-8 items-center justify-center rounded-md text-slate-400 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
+                  className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-500 transition hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40"
                   aria-label="Previous page"
                 >
                   <ChevronLeft size={16} />
@@ -523,8 +420,8 @@ export default function MemberReport() {
                     type="button"
                     key={page}
                     onClick={() => setCurrentPage(page)}
-                    className={`flex h-8 w-8 items-center justify-center rounded-md text-xs font-black transition ${
-                      safePage === page ? "bg-blue-500 text-white" : "text-slate-600 hover:bg-white"
+                    className={`flex h-8 w-8 items-center justify-center rounded-lg text-xs font-bold transition ${
+                      safePage === page ? "bg-[#055E83] text-white" : "text-gray-600 hover:bg-gray-100"
                     }`}
                   >
                     {page}
@@ -534,16 +431,15 @@ export default function MemberReport() {
                   type="button"
                   onClick={() => setCurrentPage((page) => Math.min(pageCount, page + 1))}
                   disabled={safePage === pageCount}
-                  className="flex h-8 w-8 items-center justify-center rounded-md text-slate-500 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
+                  className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-500 transition hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40"
                   aria-label="Next page"
                 >
                   <ChevronRight size={16} />
                 </button>
               </div>
             </div>
-          </section>
-        </main>
-      </div>
+          </div>
+        </div>
     </div>
   );
 }

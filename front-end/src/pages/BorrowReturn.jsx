@@ -1,314 +1,641 @@
-import { useState } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
-  Search, Plus, Calendar, User, BookOpen, DollarSign,
-  CheckCircle, ArrowLeft, ChevronRight, AlertCircle
+  Search, Plus, Calendar, User, BookOpen, RefreshCcw,
+  CheckCircle, ArrowLeft, ChevronRight, AlertCircle, X
 } from "lucide-react";
-import Sidebar from "../components/Adminsidebar";
 import Navbar from "../components/Navbar";
+import api, { ASSET_BASE_URL } from "../utils/api";
 
-// ─── Sample Data ──────────────────────────────────────────────────────────────
-const TRANSACTIONS = [
-  { id: "TXN-0847", member: "Sophea Keo",    memberId: "MEM-0042", book: "Introduction to Programming", borrowDate: "01 Jun 2025", dueDate: "15 Jun 2025", returnDate: "14 Jun 2025", status: "ACTIVE",    deweyCode: "BK-10045", author: "John Doe",      category: "Computer Science", phone: "+855 12 345 678", memberType: "Active Member" },
-  { id: "TXN-0846", member: "Dara Pich",     memberId: "MEM-0031", book: "Khmer History Vol. 2",        borrowDate: "28 May 2025", dueDate: "11 Jun 2025", returnDate: null,           status: "OVERDUE",   deweyCode: "BK-10032", author: "Chheng Phon",  category: "History",          phone: "+855 23 456 789", memberType: "Active Member" },
-  { id: "TXN-0845", member: "Maly Sok",      memberId: "MEM-0028", book: "Mathematics for Engineers",   borrowDate: "25 May 2025", dueDate: "08 Jun 2025", returnDate: "07 Jun 2025", status: "RETURNED",  deweyCode: "BK-10021", author: "MoEYS",         category: "Science",          phone: "+855 34 567 890", memberType: "Active Member" },
-  { id: "TXN-0844", member: "Ratha Lim",     memberId: "MEM-0019", book: "English Grammar in Use",      borrowDate: "20 May 2025", dueDate: "03 Jun 2025", returnDate: null,           status: "ACTIVE",    deweyCode: "BK-10018", author: "Raymond Murphy",category: "Language",         phone: "+855 45 678 901", memberType: "Active Member" },
-  { id: "TXN-0843", member: "Bopha Chan",    memberId: "MEM-0055", book: "Data Structures & Algorithms",borrowDate: "18 May 2025", dueDate: "01 Jun 2025", returnDate: null,           status: "OVERDUE",   deweyCode: "BK-10009", author: "Thomas Cormen", category: "Computer Science", phone: "+855 56 789 012", memberType: "Active Member" },
-  { id: "TXN-0842", member: "Visal Heng",    memberId: "MEM-0037", book: "Chemistry Fundamentals",      borrowDate: "15 May 2025", dueDate: "29 May 2025", returnDate: "28 May 2025", status: "RETURNED",  deweyCode: "BK-10014", author: "Dr. Chan Sothy",category: "Science",          phone: "+855 67 890 123", memberType: "Active Member" },
-  { id: "TXN-0841", member: "Sreyleak Noun", memberId: "MEM-0011", book: "World Atlas 2024",            borrowDate: "10 May 2025", dueDate: "24 May 2025", returnDate: null,           status: "ACTIVE",    deweyCode: "BK-10003", author: "National Geo",  category: "Reference",        phone: "+855 78 901 234", memberType: "Active Member" },
-  { id: "TXN-0840", member: "Kosal Ean",     memberId: "MEM-0044", book: "Physics Concepts",            borrowDate: "05 May 2025", dueDate: "19 May 2025", returnDate: "18 May 2025", status: "RETURNED",  deweyCode: "BK-10007", author: "Dr. Sophea Mao",category: "Science",          phone: "+855 89 012 345", memberType: "Active Member" },
-];
-
+//Shared helpers 
 const statusStyle = {
-  "ACTIVE":   { bg: "#E8F5E9", text: "#2E7D32" },
-  "OVERDUE":  { bg: "#FFEBEE", text: "#C62828" },
-  "RETURNED": { bg: "#F1F5F9", text: "#64748B" },
+  Borrowed: { bg: "#E8F5E9", text: "#2E7D32", label: "ACTIVE" },
+  Overdue:  { bg: "#FFEBEE", text: "#C62828", label: "OVERDUE" },
+  Returned: { bg: "#F1F5F9", text: "#64748B", label: "RETURNED" },
 };
 
-const TAB_COUNTS = { "All Transactions": 1284, "Active": 324, "Overdue": 12, "Returned": 948 };
+const TABS = [
+  { label: "All Transactions", value: "All" },
+  { label: "Active", value: "Borrowed" },
+  { label: "Overdue", value: "Overdue" },
+  { label: "Returned", value: "Returned" },
+];
 
-// ─── Page 1: Transaction List ─────────────────────────────────────────────────
-function TransactionList({ onNewBorrow, onViewDetails, onReturn }) {
+const PAGE_SIZE = 8;
+
+const inputCls = "w-full border-2 border-gray-300 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#055E83] transition text-gray-800 placeholder:text-gray-400";
+const filterPillCls = "flex items-center gap-2 bg-white border-2 border-gray-300 rounded-lg px-3 py-2";
+
+const tableGridStyle = {
+  display: "grid",
+  gridTemplateColumns: "90px 1.4fr 1.6fr 120px 120px 110px 190px",
+  alignItems: "center",
+  gap: "1rem",
+  paddingLeft: "1.5rem",
+  paddingRight: "1.5rem",
+};
+
+const formatDate = (d) => (d ? new Date(d).toLocaleDateString("en-US", { day: "2-digit", month: "short", year: "numeric" }) : "—");
+
+function mapRecord(r) {
+  const effectiveStatus = r.status === "Borrowed" && r.isOverdue ? "Overdue" : r.status;
+  return {
+    borrow_id: r.borrow_id,
+    member: r.members?.full_name || "Unknown Member",
+    book: r.books?.title || "Unknown Book",
+    borrowDate: r.borrow_date,
+    dueDate: r.due_date,
+    returnDate: r.return_date,
+    status: effectiveStatus,
+    rawStatus: r.status,
+  };
+}
+
+// Fuzzy matching (client-side, no dependency) 
+// Standard edit-distance algorithm: counts the fewest single-character
+// insert/delete/substitute operations needed to turn one string into the
+// other. Used below to tolerate small typos instead of requiring an exact
+// substring match.
+function levenshteinDistance(a, b) {
+  a = a || "";
+  b = b || "";
+  const m = a.length;
+  const n = b.length;
+  if (m === 0) return n;
+  if (n === 0) return m;
+
+  const dp = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
+  for (let i = 0; i <= m; i++) dp[i][0] = i;
+  for (let j = 0; j <= n; j++) dp[0][j] = j;
+
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      dp[i][j] = Math.min(
+        dp[i - 1][j] + 1,      // deletion
+        dp[i][j - 1] + 1,      // insertion
+        dp[i - 1][j - 1] + cost // substitution
+      );
+    }
+  }
+  return dp[m][n];
+}
+
+// Returns 0–1: 1 = exact/substring match, lower = less similar.
+// Checked against the whole field and each individual word, so "sofea"
+// still matches "Sophea Keo" even though it's a typo of just the first word.
+function fuzzyScore(query, target) {
+  const q = (query || "").toLowerCase().trim();
+  const t = (target || "").toLowerCase().trim();
+  if (!q || !t) return 0;
+  if (t.includes(q)) return 1;
+
+  const words = t.split(/\s+/);
+  let best = 0;
+  for (const candidate of [t, ...words]) {
+    if (!candidate) continue;
+    const dist = levenshteinDistance(q, candidate);
+    const sim = 1 - dist / Math.max(q.length, candidate.length);
+    if (sim > best) best = sim;
+  }
+  return best;
+}
+
+const FUZZY_THRESHOLD = 0.5; // tolerates roughly 1–2 mistyped characters
+
+function rankMembers(query, members, limit = 6) {
+  if (!query.trim()) return members.slice(0, limit);
+  return members
+    .map((m) => ({ m, score: Math.max(fuzzyScore(query, m.full_name), fuzzyScore(query, m.email)) }))
+    .filter((x) => x.score >= FUZZY_THRESHOLD)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit)
+    .map((x) => x.m);
+}
+
+function rankBooks(query, books, limit = 6) {
+  if (!query.trim()) return books.slice(0, limit);
+  return books
+    .map((b) => ({
+      b,
+      score: Math.max(
+        fuzzyScore(query, b.title),
+        fuzzyScore(query, b.author),
+        fuzzyScore(query, b.dewey_code),
+        fuzzyScore(query, b.isbn)
+      ),
+    }))
+    .filter((x) => x.score >= FUZZY_THRESHOLD)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit)
+    .map((x) => x.b);
+}
+
+//Page 1: Transaction List 
+function TransactionList({ onNewBorrow, onViewDetails, onReturn, refreshKey }) {
   const [search, setSearch] = useState("");
-  const [activeTab, setActiveTab] = useState("All Transactions");
+  const [activeTab, setActiveTab] = useState("All");
+  const [records, setRecords] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [page, setPage] = useState(1);
 
-  const filtered = TRANSACTIONS.filter((t) => {
+  useEffect(() => {
+    fetchRecords();
+  }, [refreshKey]);
+
+  const fetchRecords = async () => {
+    try {
+      setLoading(true);
+      const response = await api.get("/borrow-records?limit=500");
+      if (response.data?.success) {
+        setRecords(response.data.data.map(mapRecord));
+      }
+    } catch (err) {
+      console.error("Failed to load borrow records:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRefreshOverdue = async () => {
+    try {
+      setRefreshing(true);
+      await api.post("/borrow-records/refresh-overdue");
+      await fetchRecords();
+    } catch (err) {
+      console.error("Failed to refresh overdue status:", err);
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  const counts = {
+    All: records.length,
+    Borrowed: records.filter((r) => r.status === "Borrowed").length,
+    Overdue: records.filter((r) => r.status === "Overdue").length,
+    Returned: records.filter((r) => r.status === "Returned").length,
+  };
+
+  const filtered = records.filter((r) => {
     const q = search.toLowerCase();
-    const matchSearch = search === "" || `${t.member} ${t.book} ${t.id}`.toLowerCase().includes(q);
-    const matchTab = activeTab === "All Transactions" || t.status === activeTab.toUpperCase() ||
-      (activeTab === "Returned" && t.status === "RETURNED");
+    const matchSearch = search === "" || `${r.member} ${r.book} TXN-${r.borrow_id}`.toLowerCase().includes(q);
+    const matchTab = activeTab === "All" || r.status === activeTab;
     return matchSearch && matchTab;
   });
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   return (
     <div>
       <Navbar title="Borrow / Return" breadcrumb="Welcome back, Librarian" />
       <div className="px-6 py-5 space-y-4">
 
-        {/* Search + Date */}
+        {/* Search + Refresh Overdue */}
         <div className="flex items-center gap-3">
-          <div className="flex-1 flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-2.5">
+          <div className={`${filterPillCls} flex-1`}>
             <Search size={14} className="text-gray-400 shrink-0" />
-            <input value={search} onChange={(e) => setSearch(e.target.value)}
+            <input value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }}
               placeholder="Search by member name, book title, or transaction ID..."
-              className="text-sm outline-none w-full bg-transparent text-gray-600 placeholder-gray-400" />
+              className="text-xs outline-none w-full bg-transparent text-gray-600 placeholder-gray-400" />
           </div>
-          <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-4 py-2.5">
-            <Calendar size={14} className="text-gray-400" />
-            <span className="text-sm text-gray-600">Jun 2025</span>
-          </div>
+          <button onClick={handleRefreshOverdue} disabled={refreshing} className={`${filterPillCls} hover:bg-gray-50 transition disabled:opacity-60`}>
+            <RefreshCcw size={13} className={`text-gray-500 ${refreshing ? "animate-spin" : ""}`} />
+            <span className="text-xs font-bold text-gray-600">{refreshing ? "Refreshing..." : "Refresh Overdue Status"}</span>
+          </button>
         </div>
 
         {/* Tabs */}
-        <div className="flex items-center gap-6 border-b border-gray-200">
-          {Object.entries(TAB_COUNTS).map(([tab, count]) => (
-            <button key={tab} onClick={() => setActiveTab(tab)}
-              className={`flex items-center gap-2 pb-3 text-sm font-semibold transition border-b-2 ${activeTab === tab ? "border-[#1B4965] text-[#1B4965]" : "border-transparent text-gray-400 hover:text-gray-600"}`}>
-              {tab}
+        <div className="flex items-center gap-6 border-b-2 border-gray-300">
+          {TABS.map(({ label, value }) => (
+            <button key={value} onClick={() => { setActiveTab(value); setPage(1); }}
+              className={`flex items-center gap-2 pb-3 text-sm font-semibold transition border-b-2 -mb-[2px] ${activeTab === value ? "border-[#055E83] text-[#055E83]" : "border-transparent text-gray-400 hover:text-gray-600"}`}>
+              {label}
               <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
-                tab === "Overdue" ? "bg-red-100 text-red-600" :
-                activeTab === tab ? "bg-[#1B4965] text-white" : "bg-gray-100 text-gray-500"
-              }`}>{count}</span>
+                value === "Overdue" ? "bg-red-100 text-red-600" :
+                activeTab === value ? "bg-[#055E83] text-white" : "bg-white border border-gray-300 text-gray-500"
+              }`}>{counts[value] ?? 0}</span>
             </button>
           ))}
         </div>
 
         {/* Table */}
-        <div className="bg-white rounded-xl overflow-hidden" style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.06)", border: "1px solid #e5e7eb" }}>
-          <div className="flex items-center justify-between px-5 py-3.5" style={{ backgroundColor: "#1B4965" }}>
+        <div className="bg-white rounded-xl border-2 border-gray-300" style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.12)", overflow: "hidden" }}>
+          <div className="flex items-center justify-between px-5 py-3" style={{ backgroundColor: "#055E83" }}>
             <h2 className="text-white font-bold text-sm">Recent Transactions</h2>
             <button onClick={onNewBorrow}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold hover:opacity-90 transition"
-              style={{ backgroundColor: "#E8C110", color: "#1B4965" }}>
+              style={{ backgroundColor: "#E8C110", color: "#055E83" }}>
               <Plus size={13} /> New Borrow
             </button>
           </div>
 
-          {/* Column Headers */}
-          <div className="grid grid-cols-[120px_1fr_1fr_110px_110px_100px_160px] px-5 py-3 bg-gray-50/70 border-b border-gray-100 text-xs font-bold uppercase tracking-wider" style={{ color: "#055E83" }}>
-            <span>ID</span>
-            <span>Member Name</span>
-            <span>Book Title</span>
-            <span>Borrow Date</span>
-            <span>Due Date</span>
-            <span>Status</span>
-            <span>Actions</span>
-          </div>
-
-          {filtered.map((t) => (
-            <div key={t.id} className="grid grid-cols-[120px_1fr_1fr_110px_110px_100px_160px] px-5 py-3.5 border-b border-gray-50 hover:bg-slate-50/60 transition items-center">
-              <span className="text-xs text-gray-500 font-medium">{t.id}</span>
-              <span className="text-sm font-bold text-gray-800">{t.member}</span>
-              <span className="text-sm text-gray-600">{t.book}</span>
-              <span className="text-xs text-gray-500">{t.borrowDate}</span>
-              <span className="text-xs text-gray-500">{t.dueDate}</span>
-              <span>
-                <span className="text-[11px] font-bold px-2.5 py-1 rounded-full"
-                  style={{ backgroundColor: statusStyle[t.status]?.bg, color: statusStyle[t.status]?.text }}>
-                  {t.status}
-                </span>
-              </span>
-              <div className="flex items-center gap-1.5">
-                <button onClick={() => onViewDetails(t)}
-                  className="px-3 py-1.5 rounded-md text-xs font-semibold border border-gray-200 text-gray-600 hover:bg-gray-50 transition">
-                  View Details
-                </button>
-                <button onClick={() => onReturn(t)}
-                  className="px-3 py-1.5 rounded-md text-xs font-bold text-white hover:opacity-90 transition"
-                  style={{ backgroundColor: "#1B4965" }}>
-                  Return
-                </button>
+          <div style={{ overflowX: "auto", width: "100%" }}>
+            <div style={{ minWidth: "960px" }}>
+              <div style={{ ...tableGridStyle, paddingTop: "0.75rem", paddingBottom: "0.75rem" }} className="border-b-2 border-gray-300 bg-gray-50/70 text-xs font-bold uppercase tracking-wider">
+                <span style={{ color: "#055E83" }}>ID</span>
+                <span style={{ color: "#055E83" }}>Member Name</span>
+                <span style={{ color: "#055E83" }}>Book Title</span>
+                <span style={{ color: "#055E83" }}>Borrow Date</span>
+                <span style={{ color: "#055E83" }}>Due Date</span>
+                <span style={{ color: "#055E83" }}>Status</span>
+                <span style={{ color: "#055E83", textAlign: "center" }}>Actions</span>
               </div>
+
+              {loading ? (
+                <div className="p-10 text-center text-sm text-gray-400">Loading transactions...</div>
+              ) : paged.length === 0 ? (
+                <div className="p-10 text-center text-sm text-gray-400">No transactions match your filter criteria.</div>
+              ) : (
+                paged.map((t) => (
+                  <div key={t.borrow_id} style={{ ...tableGridStyle, paddingTop: "0.875rem", paddingBottom: "0.875rem" }} className="border-b border-gray-200 hover:bg-slate-50/60 transition">
+                    <span className="text-xs text-gray-500 font-bold">TXN-{t.borrow_id}</span>
+                    <span className="text-sm font-bold text-gray-800 truncate">{t.member}</span>
+                    <span className="text-sm text-gray-600 truncate">{t.book}</span>
+                    <span className="text-xs text-gray-500">{formatDate(t.borrowDate)}</span>
+                    <span className="text-xs text-gray-500">{formatDate(t.dueDate)}</span>
+                    <div>
+                      <span className="text-[11px] font-bold px-2.5 py-1 rounded-md uppercase"
+                        style={{ backgroundColor: statusStyle[t.status]?.bg, color: statusStyle[t.status]?.text }}>
+                        {statusStyle[t.status]?.label || t.status}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-center gap-1.5">
+                      <button onClick={() => onViewDetails(t.borrow_id)}
+                        className="px-3 py-1.5 rounded-md text-xs font-bold border-2 border-gray-300 text-gray-600 hover:bg-gray-50 transition shadow-sm">
+                        View Details
+                      </button>
+                      <button onClick={() => onReturn(t)} disabled={t.status === "Returned"}
+                        className="px-3 py-1.5 rounded-md text-xs font-bold text-white hover:opacity-90 transition shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
+                        style={{ backgroundColor: "#055E83" }}>
+                        Return
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
-          ))}
+          </div>
         </div>
+
+        {totalPages > 1 && (
+          <div className="flex items-center justify-end gap-2">
+            <button disabled={page === 1} onClick={() => setPage((p) => Math.max(1, p - 1))} className="px-3 py-1.5 border-2 border-gray-300 rounded-lg text-xs font-bold text-gray-600 hover:bg-gray-50 disabled:opacity-40 transition">Prev</button>
+            <span className="text-xs text-gray-500 font-medium px-2">Page {page} of {totalPages}</span>
+            <button disabled={page === totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))} className="px-3 py-1.5 border-2 border-gray-300 rounded-lg text-xs font-bold text-gray-600 hover:bg-gray-50 disabled:opacity-40 transition">Next</button>
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-// ─── Page 2: New Borrow Transaction ──────────────────────────────────────────
+//Page 2: New Borrow Transaction 
 function NewBorrow({ onCancel, onSave }) {
-  const [memberName, setMemberName] = useState("");
-  const [bookTitle, setBookTitle] = useState("");
-  const [borrowDate] = useState("01 Jun 2025");
-  const [dueDate] = useState("15 Jun 2025");
-  const [notes, setNotes] = useState("");
-  const [bookSearched, setBookSearched] = useState(false);
+  const [allMembers, setAllMembers] = useState([]);
+  const [allBooks, setAllBooks] = useState([]);
+  const [membersLoading, setMembersLoading] = useState(true);
+  const [booksLoading, setBooksLoading] = useState(true);
 
-  const handleBookSearch = () => setBookSearched(true);
+  const [memberQuery, setMemberQuery] = useState("");
+  const [memberFocused, setMemberFocused] = useState(false);
+  const [selectedMember, setSelectedMember] = useState(null);
+
+  const [bookQuery, setBookQuery] = useState("");
+  const [bookFocused, setBookFocused] = useState(false);
+  const [selectedBook, setSelectedBook] = useState(null);
+
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  const todayStr = formatDate(new Date());
+  const estimatedDueStr = formatDate(new Date(Date.now() + 14 * 24 * 60 * 60 * 1000));
+
+  useEffect(() => {
+    fetchAllMembers();
+    fetchAllBooks();
+  }, []);
+
+  const fetchAllMembers = async () => {
+    try {
+      setMembersLoading(true);
+      const response = await api.get("/members?limit=500");
+      if (response.data?.success) setAllMembers(response.data.data);
+    } catch (err) {
+      console.error("Failed to load member directory:", err);
+    } finally {
+      setMembersLoading(false);
+    }
+  };
+
+  const fetchAllBooks = async () => {
+    try {
+      setBooksLoading(true);
+      const response = await api.get("/books?limit=500");
+      if (response.data?.success) setAllBooks(response.data.data);
+    } catch (err) {
+      console.error("Failed to load book catalog:", err);
+    } finally {
+      setBooksLoading(false);
+    }
+  };
+
+  // Recomputed instantly on every keystroke — no network round-trip, since
+  // the full lists are already cached in memory above.
+  const memberResults = useMemo(() => {
+    if (selectedMember || !memberFocused) return [];
+    return rankMembers(memberQuery, allMembers);
+  }, [memberQuery, allMembers, selectedMember, memberFocused]);
+
+  const bookResults = useMemo(() => {
+    if (selectedBook || !bookFocused) return [];
+    return rankBooks(bookQuery, allBooks);
+  }, [bookQuery, allBooks, selectedBook, bookFocused]);
+
+  const pickMember = (m) => {
+    setSelectedMember(m);
+    setMemberQuery(m.full_name);
+    setMemberFocused(false);
+  };
+
+  const pickBook = (b) => {
+    setSelectedBook(b);
+    setBookQuery(b.title);
+    setBookFocused(false);
+  };
+
+  const clearMember = () => {
+    setSelectedMember(null);
+    setMemberQuery("");
+  };
+
+  const clearBook = () => {
+    setSelectedBook(null);
+    setBookQuery("");
+  };
+
+  const handleSave = async () => {
+    setError("");
+    if (!selectedMember || !selectedBook) {
+      setError("Please select both a member and a book before saving.");
+      return;
+    }
+    try {
+      setSaving(true);
+      const response = await api.post("/borrow-records", {
+        memberId: selectedMember.member_id,
+        bookId: selectedBook.book_id,
+      });
+      if (response.data?.success) onSave();
+    } catch (err) {
+      console.error("Failed to create borrow record:", err);
+      const backendMessage = err.response?.data?.error || err.response?.data?.message;
+      setError(backendMessage || "Failed to create the transaction. Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <div>
       <Navbar title="Transactions" breadcrumb="Manage all borrow and return records" />
       <div className="px-6 py-5">
 
-        {/* Breadcrumb + Cancel */}
         <div className="flex items-center justify-between mb-5">
           <div className="flex items-center gap-2 text-sm">
-            <span className="text-[#055E83] font-medium cursor-pointer hover:underline" onClick={onCancel}>Borrow / Return</span>
+            <span className="text-[#055E83] font-bold cursor-pointer hover:underline" onClick={onCancel}>Borrow / Return</span>
             <ChevronRight size={14} className="text-gray-400" />
-            <span className="text-gray-700 font-semibold">New Borrow Transaction</span>
+            <span className="text-gray-700 font-bold">New Borrow Transaction</span>
           </div>
-          <button onClick={onCancel} className="px-4 py-2 rounded-lg border border-gray-200 text-sm text-gray-600 hover:bg-gray-50 transition">Cancel</button>
+          <button onClick={onCancel} className="px-5 py-2 rounded-xl border-2 border-gray-300 text-sm font-bold text-gray-600 hover:bg-gray-50 transition bg-white">Cancel</button>
         </div>
 
+        {error && (
+          <div className="flex items-start gap-2.5 bg-red-50 border-2 border-red-200 text-red-600 text-sm rounded-xl px-4 py-3 mb-4">
+            <AlertCircle size={16} className="shrink-0 mt-0.5" />
+            <span>{error}</span>
+          </div>
+        )}
+
         <div className="grid grid-cols-[1fr_280px] gap-5 items-start">
-          {/* Left */}
           <div className="space-y-4">
 
             {/* Section 1: Borrower Information */}
-            <div className="bg-white rounded-xl border border-gray-100 p-6" style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.05)" }}>
+            <div className="bg-white rounded-xl border-2 border-gray-300 p-6" style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.12)" }}>
               <h3 className="text-sm font-bold mb-4 flex items-center gap-2" style={{ color: "#055E83" }}>
                 <span className="w-5 h-5 rounded-full bg-[#055E83] text-white text-xs flex items-center justify-center font-bold">1</span>
                 Borrower Information
               </h3>
-              <div className="border-b border-gray-100 mb-5" />
+              <div className="border-b-2 border-gray-200 mb-5" />
+
+              <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Find Member</label>
+              <div className="relative mb-1">
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                <input
+                  value={memberQuery}
+                  onChange={(e) => { setMemberQuery(e.target.value); setSelectedMember(null); }}
+                  onFocus={() => setMemberFocused(true)}
+                  onBlur={() => setTimeout(() => setMemberFocused(false), 150)}
+                  placeholder="Type a name or email — small typos are OK"
+                  className={`${inputCls} pl-9 pr-9`}
+                />
+                {selectedMember && (
+                  <button type="button" onClick={clearMember} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                    <X size={14} />
+                  </button>
+                )}
+              </div>
+
+              {memberFocused && !selectedMember && (
+                <div className="border-2 border-gray-200 rounded-lg overflow-hidden mb-4 max-h-52 overflow-y-auto shadow-sm">
+                  {membersLoading ? (
+                    <div className="px-4 py-3 text-xs text-gray-400">Loading member directory...</div>
+                  ) : memberResults.length === 0 ? (
+                    <div className="px-4 py-3 text-xs text-gray-400">
+                      {memberQuery.trim() ? "No close matches found." : "Start typing to find a member."}
+                    </div>
+                  ) : (
+                    memberResults.map((m) => (
+                      <button key={m.member_id} onMouseDown={() => pickMember(m)}
+                        className="w-full text-left px-4 py-2.5 text-xs hover:bg-gray-50 transition border-b border-gray-100 last:border-0 flex items-center justify-between">
+                        <span>
+                          <span className="font-bold text-gray-800">{m.full_name}</span>
+                          <span className="text-gray-400 ml-2">{m.email}</span>
+                        </span>
+                        <span className={`px-2 py-0.5 rounded-full font-bold shrink-0 ${m.status === "Active" ? "bg-green-50 text-green-600" : "bg-red-50 text-red-500"}`}>{m.status}</span>
+                      </button>
+                    ))
+                  )}
+                </div>
+              )}
+              <p className="text-[11px] text-gray-400 mb-4 -mt-1">Results update as you type, even with small spelling mistakes.</p>
+
               <div className="grid grid-cols-2 gap-4 mb-4">
                 <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1.5">Member Name</label>
-                  <input value={memberName} onChange={(e) => setMemberName(e.target.value)}
-                    placeholder="e.g. MEM-0001"
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#1B4965] transition text-gray-700 placeholder-gray-300" />
+                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Member ID</label>
+                  <input value={selectedMember ? `#${selectedMember.member_id}` : ""} placeholder="Select a member above" readOnly
+                    className="w-full border-2 border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none bg-gray-50 text-gray-400 cursor-not-allowed" />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1.5">Member ID</label>
-                  <input placeholder="Auto-filled after search" readOnly
-                    className="w-full border border-gray-100 rounded-lg px-3 py-2.5 text-sm outline-none bg-gray-50 text-gray-400" />
+                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Membership Type</label>
+                  <input value={selectedMember?.membership_types?.type_name || ""} placeholder="Auto-filled after selection" readOnly
+                    className="w-full border-2 border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none bg-gray-50 text-gray-400 cursor-not-allowed" />
                 </div>
               </div>
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1.5">Member Type</label>
-                  <input placeholder="Active Member" readOnly
-                    className="w-full border border-gray-100 rounded-lg px-3 py-2.5 text-sm outline-none bg-gray-50 text-gray-400" />
+                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Member Status</label>
+                  <input value={selectedMember?.status || ""} placeholder="Auto-filled after selection" readOnly
+                    className="w-full border-2 border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none bg-gray-50 text-gray-400 cursor-not-allowed" />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1.5">Date Of Birth</label>
-                  <input placeholder="Auto-filled after search" readOnly
-                    className="w-full border border-gray-100 rounded-lg px-3 py-2.5 text-sm outline-none bg-gray-50 text-gray-400" />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1.5">Phone Number</label>
-                  <input placeholder="Auto-filled after search" readOnly
-                    className="w-full border border-gray-100 rounded-lg px-3 py-2.5 text-sm outline-none bg-gray-50 text-gray-400" />
+                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Phone Number</label>
+                  <input value={selectedMember?.phone_number || ""} placeholder="Auto-filled after selection" readOnly
+                    className="w-full border-2 border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none bg-gray-50 text-gray-400 cursor-not-allowed" />
                 </div>
               </div>
             </div>
 
             {/* Section 2: Book Information */}
-            <div className="bg-white rounded-xl border border-gray-100 p-6" style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.05)" }}>
+            <div className="bg-white rounded-xl border-2 border-gray-300 p-6" style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.12)" }}>
               <h3 className="text-sm font-bold mb-4 flex items-center gap-2" style={{ color: "#055E83" }}>
                 <span className="w-5 h-5 rounded-full bg-[#055E83] text-white text-xs flex items-center justify-center font-bold">2</span>
                 Book Information
               </h3>
-              <div className="border-b border-gray-100 mb-5" />
-              <div className="grid grid-cols-2 gap-4 mb-4">
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1.5">Book Title</label>
-                  <div className="flex gap-2">
-                    <input value={bookTitle} onChange={(e) => setBookTitle(e.target.value)}
-                      placeholder="e.g. BK-10045"
-                      className="flex-1 border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#1B4965] transition text-gray-700 placeholder-gray-300" />
-                    <button onClick={handleBookSearch}
-                      className="px-4 py-2 rounded-lg text-xs font-bold text-white hover:opacity-90 transition"
-                      style={{ backgroundColor: "#1B4965" }}>Search</button>
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1.5">Dewey Code</label>
-                  <div className="flex gap-2">
-                    <input placeholder="Auto-filled after search" readOnly
-                      className="flex-1 border border-gray-100 rounded-lg px-3 py-2.5 text-sm outline-none bg-gray-50 text-gray-400" />
-                    <button className="px-4 py-2 rounded-lg text-xs font-bold text-white hover:opacity-90 transition"
-                      style={{ backgroundColor: "#1B4965" }}>Search</button>
-                  </div>
-                </div>
+              <div className="border-b-2 border-gray-200 mb-5" />
+
+              <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Find Book</label>
+              <div className="relative mb-1">
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                <input
+                  value={bookQuery}
+                  onChange={(e) => { setBookQuery(e.target.value); setSelectedBook(null); }}
+                  onFocus={() => setBookFocused(true)}
+                  onBlur={() => setTimeout(() => setBookFocused(false), 150)}
+                  placeholder="Type a title, author, or Dewey code — small typos are OK"
+                  className={`${inputCls} pl-9 pr-9`}
+                />
+                {selectedBook && (
+                  <button type="button" onClick={clearBook} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                    <X size={14} />
+                  </button>
+                )}
               </div>
+
+              {bookFocused && !selectedBook && (
+                <div className="border-2 border-gray-200 rounded-lg overflow-hidden mb-4 max-h-52 overflow-y-auto shadow-sm">
+                  {booksLoading ? (
+                    <div className="px-4 py-3 text-xs text-gray-400">Loading book catalog...</div>
+                  ) : bookResults.length === 0 ? (
+                    <div className="px-4 py-3 text-xs text-gray-400">
+                      {bookQuery.trim() ? "No close matches found." : "Start typing to find a book."}
+                    </div>
+                  ) : (
+                    bookResults.map((b) => {
+                      const disabled = !b.is_borrowable || b.available_copies <= 0;
+                      return (
+                        <button key={b.book_id} onMouseDown={() => !disabled && pickBook(b)} disabled={disabled}
+                          className="w-full text-left px-4 py-2.5 text-xs hover:bg-gray-50 transition border-b border-gray-100 last:border-0 flex items-center justify-between disabled:opacity-40 disabled:cursor-not-allowed">
+                          <span>
+                            <span className="font-bold text-gray-800">{b.title}</span>
+                            <span className="text-gray-400 ml-2">{b.author} · {b.dewey_code}</span>
+                          </span>
+                          <span className={`px-2 py-0.5 rounded-full font-bold shrink-0 ${b.available_copies > 0 ? "bg-green-50 text-green-600" : "bg-red-50 text-red-500"}`}>
+                            {b.available_copies}/{b.total_copies} available
+                          </span>
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+              )}
+              <p className="text-[11px] text-gray-400 mb-4 -mt-1">Results update as you type, even with small spelling mistakes.</p>
+
               <div className="flex gap-4">
-                <div className="w-28 h-36 rounded-xl border border-gray-100 bg-gray-50 overflow-hidden flex items-center justify-center shrink-0">
-                  {bookSearched ? (
-                    <BookOpen size={32} className="text-gray-300" />
+                <div className="w-28 h-36 rounded-xl border-2 border-gray-300 bg-gray-50 overflow-hidden flex items-center justify-center shrink-0">
+                  {selectedBook?.cover_image_url ? (
+                    <img src={`${ASSET_BASE_URL}${selectedBook.cover_image_url}`} alt={selectedBook.title} className="w-full h-full object-cover" />
                   ) : (
                     <BookOpen size={32} className="text-gray-200" />
                   )}
                 </div>
-                <div className="flex-1 space-y-3">
+                <div className="flex-1 grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-medium text-gray-500 mb-1.5">Author</label>
-                    <input placeholder="Auto-filled after search" readOnly
-                      className="w-full border border-gray-100 rounded-lg px-3 py-2.5 text-sm outline-none bg-gray-50 text-gray-400" />
+                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Dewey Code</label>
+                    <input value={selectedBook?.dewey_code || ""} placeholder="Auto-filled after selection" readOnly
+                      className="w-full border-2 border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none bg-gray-50 text-gray-400 cursor-not-allowed" />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-500 mb-1.5">Descriptions</label>
-                    <textarea placeholder="Auto-filled after search" readOnly rows={3}
-                      className="w-full border border-gray-100 rounded-lg px-3 py-2.5 text-sm outline-none bg-gray-50 text-gray-400 resize-none" />
+                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Author</label>
+                    <input value={selectedBook?.author || ""} placeholder="Auto-filled after selection" readOnly
+                      className="w-full border-2 border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none bg-gray-50 text-gray-400 cursor-not-allowed" />
+                  </div>
+                  <div className="col-span-2">
+                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Description</label>
+                    <textarea value={selectedBook?.description || ""} placeholder="Auto-filled after selection" readOnly rows={3}
+                      className="w-full border-2 border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none bg-gray-50 text-gray-400 cursor-not-allowed resize-none" />
                   </div>
                 </div>
               </div>
             </div>
 
             {/* Section 3: Borrow Information */}
-            <div className="bg-white rounded-xl border border-gray-100 p-6" style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.05)" }}>
+            <div className="bg-white rounded-xl border-2 border-gray-300 p-6" style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.12)" }}>
               <h3 className="text-sm font-bold mb-4 flex items-center gap-2" style={{ color: "#055E83" }}>
                 <span className="w-5 h-5 rounded-full bg-[#055E83] text-white text-xs flex items-center justify-center font-bold">3</span>
                 Borrow Information
               </h3>
-              <div className="border-b border-gray-100 mb-5" />
-              <div className="grid grid-cols-2 gap-4 mb-4">
+              <div className="border-b-2 border-gray-200 mb-5" />
+              <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1.5">Borrow Date</label>
-                  <div className="flex items-center gap-2 border border-gray-200 rounded-lg px-3 py-2.5">
+                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Borrow Date</label>
+                  <div className="flex items-center gap-2 border-2 border-gray-300 rounded-lg px-3 py-2.5 bg-white">
                     <Calendar size={14} className="text-gray-400" />
-                    <span className="text-sm text-gray-700">{borrowDate}</span>
+                    <span className="text-sm text-gray-700 font-medium">{todayStr}</span>
                   </div>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1.5">Due Date</label>
-                  <div className="flex items-center gap-2 border border-gray-200 rounded-lg px-3 py-2.5">
+                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Due Date (estimated)</label>
+                  <div className="flex items-center gap-2 border-2 border-gray-300 rounded-lg px-3 py-2.5 bg-white">
                     <Calendar size={14} className="text-gray-400" />
-                    <span className="text-sm text-gray-700">{dueDate}</span>
+                    <span className="text-sm text-gray-700 font-medium">{estimatedDueStr}</span>
                   </div>
                 </div>
               </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1.5">Notes (Optional)</label>
-                <textarea value={notes} onChange={(e) => setNotes(e.target.value)}
-                  placeholder="Add any special notes or remarks..."
-                  rows={3}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#1B4965] transition resize-none text-gray-700 placeholder-gray-300" />
-              </div>
+              <p className="text-[11px] text-gray-400 mt-2">The exact due date is set automatically to 14 days from today when the transaction is saved.</p>
             </div>
           </div>
 
-          {/* Right: Transaction Summary */}
+          {/* Right Side: Summary */}
           <div className="space-y-3">
-            <div className="bg-white rounded-xl border border-gray-100 p-5" style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.05)" }}>
+            <div className="bg-white rounded-xl border-2 border-gray-300 p-5" style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.12)" }}>
               <h3 className="text-sm font-bold text-[#055E83] mb-4">Transaction Summary</h3>
               <div className="space-y-3">
-                {[["Borrower", "Sophea Keo"], ["Book", "Intro to Programming"], ["Borrow Date", "01 Jun 2025"], ["Due Date", "15 Jun 2025"], ["Duration", "14 days"]].map(([label, val]) => (
-                  <div key={label} className="flex justify-between items-baseline">
-                    <span className="text-xs text-gray-400">{label}</span>
-                    <span className="text-xs font-semibold text-gray-700 text-right max-w-[140px]">{val}</span>
+                {[
+                  ["Borrower", selectedMember?.full_name || "Not selected"],
+                  ["Book", selectedBook?.title || "Not selected"],
+                  ["Borrow Date", todayStr],
+                  ["Due Date", estimatedDueStr],
+                  ["Duration", "14 days"],
+                ].map(([label, val]) => (
+                  <div key={label} className="flex justify-between items-baseline border-b border-gray-100 pb-2.5 last:border-0 last:pb-0">
+                    <span className="text-xs text-gray-400 font-semibold">{label}</span>
+                    <span className="text-xs font-bold text-gray-700 text-right max-w-[140px] truncate">{val}</span>
                   </div>
                 ))}
               </div>
             </div>
 
-            <button onClick={onSave}
-              className="w-full flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-bold text-white hover:opacity-90 transition"
-              style={{ backgroundColor: "#1B4965" }}>
-              <BookOpen size={15} /> Save Transaction
+            <button onClick={handleSave} disabled={saving}
+              className="w-full flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-bold text-white hover:opacity-90 transition shadow-md disabled:opacity-60"
+              style={{ backgroundColor: "#055E83" }}>
+              <BookOpen size={15} /> {saving ? "Saving..." : "Save Transaction"}
             </button>
 
             <button onClick={onCancel}
-              className="w-full py-3 rounded-xl text-sm font-semibold border border-gray-200 text-gray-600 hover:bg-gray-50 transition">
+              className="w-full py-3 rounded-xl text-sm font-bold border-2 border-gray-300 text-gray-600 hover:bg-gray-50 transition bg-white shadow-sm">
               Cancel — Back to Transactions
             </button>
-
-            <div className="flex items-start gap-2 bg-yellow-50 border border-yellow-200 rounded-xl px-4 py-3">
-              <AlertCircle size={14} className="text-yellow-500 shrink-0 mt-0.5" />
-              <p className="text-xs text-yellow-700">After saving, the transaction will appear in the Transactions page.</p>
-            </div>
           </div>
         </div>
       </div>
@@ -316,101 +643,100 @@ function NewBorrow({ onCancel, onSave }) {
   );
 }
 
-// ─── Page 3: Return Book (Confirm) ────────────────────────────────────────────
+//Page 3: Return Book (Confirm) 
 function ReturnBook({ transaction, onCancel, onConfirm }) {
-  const [condition, setCondition] = useState("Good");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
+
+  const daysOverdue = transaction.status === "Overdue"
+    ? Math.max(0, Math.ceil((new Date() - new Date(transaction.dueDate)) / (1000 * 60 * 60 * 24)))
+    : 0;
+
+  const handleConfirm = async () => {
+    try {
+      setSubmitting(true);
+      setError("");
+      await api.put(`/borrow-records/${transaction.borrow_id}/return`);
+      onConfirm();
+    } catch (err) {
+      console.error("Failed to process return:", err);
+      const backendMessage = err.response?.data?.error || err.response?.data?.message;
+      setError(backendMessage || "Failed to process the return. Please try again.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   return (
     <div>
       <Navbar title="Transactions" breadcrumb="Manage all borrow and return records" />
       <div className="px-6 py-5">
 
-        {/* Breadcrumb + Cancel */}
         <div className="flex items-center justify-between mb-5">
           <div className="flex items-center gap-2 text-sm">
-            <span className="text-[#055E83] font-medium cursor-pointer hover:underline" onClick={onCancel}>Borrow / Return</span>
+            <span className="text-[#055E83] font-bold cursor-pointer hover:underline" onClick={onCancel}>Borrow / Return</span>
             <ChevronRight size={14} className="text-gray-400" />
-            <span className="text-gray-700 font-semibold">Return Book</span>
+            <span className="text-gray-700 font-bold">Return Book</span>
           </div>
-          <button onClick={onCancel} className="px-4 py-2 rounded-lg border border-gray-200 text-sm text-gray-600 hover:bg-gray-50 transition">Cancel</button>
+          <button onClick={onCancel} className="px-5 py-2 rounded-xl border-2 border-gray-300 text-sm font-bold text-gray-600 hover:bg-gray-50 transition bg-white">Cancel</button>
         </div>
 
-        <div className="grid grid-cols-[1fr_280px] gap-5 items-start">
-          {/* Left */}
-          <div className="space-y-4">
-            <div className="bg-white rounded-xl border border-gray-100 p-6" style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.05)" }}>
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm font-bold text-[#055E83]">Borrow Record Details</h3>
-                <span className="text-xs font-bold px-2.5 py-1 rounded-full" style={{ backgroundColor: statusStyle[transaction.status]?.bg, color: statusStyle[transaction.status]?.text }}>
-                  {transaction.status}
-                </span>
-              </div>
-              <div className="border-b border-gray-100 mb-5" />
-              <div className="grid grid-cols-2 gap-y-4 gap-x-8">
-                {[
-                  ["Transaction ID", transaction.id],
-                  ["Borrow Date", transaction.borrowDate],
-                  ["Member Name", transaction.member],
-                  ["Due Date", transaction.dueDate],
-                  ["Book Title", transaction.book],
-                  ["Days Overdue", <span className="text-green-600 font-bold">0 days</span>],
-                ].map(([label, val], i) => (
-                  <div key={i}>
-                    <p className="text-xs text-gray-400 mb-0.5">{label}</p>
-                    <p className="text-sm font-semibold text-gray-800">{val}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
+        {error && (
+          <div className="flex items-start gap-2.5 bg-red-50 border-2 border-red-200 text-red-600 text-sm rounded-xl px-4 py-3 mb-4">
+            <AlertCircle size={16} className="shrink-0 mt-0.5" />
+            <span>{error}</span>
+          </div>
+        )}
 
-            {/* Book Return Condition */}
-            <div className="bg-white rounded-xl border border-gray-100 p-6" style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.05)" }}>
-              <h3 className="text-sm font-semibold text-gray-700 mb-4">Book Return Condition</h3>
-              <div className="grid grid-cols-3 gap-3">
-                {["Good", "Fair", "Damaged"].map((c) => (
-                  <button key={c} onClick={() => setCondition(c)}
-                    className={`flex items-center gap-2 px-4 py-3 rounded-xl border text-sm font-semibold transition ${
-                      condition === c
-                        ? c === "Damaged"
-                          ? "border-red-400 bg-red-50 text-red-600"
-                          : "border-green-400 bg-green-50 text-green-700"
-                        : "border-gray-200 text-gray-500 hover:border-gray-300 bg-white"
-                    }`}>
-                    <span className={`w-3 h-3 rounded-full border-2 flex items-center justify-center ${
-                      condition === c
-                        ? c === "Damaged" ? "border-red-500 bg-red-500" : "border-green-500 bg-green-500"
-                        : "border-gray-300"
-                    }`}>
-                      {condition === c && <span className="w-1.5 h-1.5 rounded-full bg-white" />}
-                    </span>
-                    {c}
-                  </button>
-                ))}
-              </div>
+        <div className="grid grid-cols-[1fr_280px] gap-5 items-start">
+          <div className="bg-white rounded-xl border-2 border-gray-300 p-6" style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.12)" }}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-bold text-[#055E83]">Borrow Record Details</h3>
+              <span className="text-xs font-bold px-2.5 py-1 rounded-full" style={{ backgroundColor: statusStyle[transaction.status]?.bg, color: statusStyle[transaction.status]?.text }}>
+                {statusStyle[transaction.status]?.label}
+              </span>
             </div>
+            <div className="border-b-2 border-gray-200 mb-5" />
+            <div className="grid grid-cols-2 gap-y-4 gap-x-8">
+              {[
+                ["Transaction ID", `TXN-${transaction.borrow_id}`],
+                ["Borrow Date", formatDate(transaction.borrowDate)],
+                ["Member Name", transaction.member],
+                ["Due Date", formatDate(transaction.dueDate)],
+                ["Book Title", transaction.book],
+                ["Days Overdue", <span className={daysOverdue > 0 ? "text-red-600 font-bold" : "text-green-600 font-bold"}>{daysOverdue} days</span>],
+              ].map(([label, val], i) => (
+                <div key={i}>
+                  <p className="text-xs text-gray-400 mb-0.5 font-bold uppercase tracking-wider">{label}</p>
+                  <p className="text-sm font-bold text-gray-800">{val}</p>
+                </div>
+              ))}
+            </div>
+            <p className="text-[11px] text-gray-400 mt-5">
+              Confirming will mark this book as returned and automatically restock it in inventory. To log damage or a lost book, use the Damage Reports page after confirming.
+            </p>
           </div>
 
-          {/* Right: Return Summary */}
           <div className="space-y-3">
-            <div className="bg-white rounded-xl border border-gray-100 p-5" style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.05)" }}>
-              <h3 className="text-sm font-bold text-gray-700 mb-4">Return Summary</h3>
+            <div className="bg-white rounded-xl border-2 border-gray-300 p-5" style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.12)" }}>
+              <h3 className="text-sm font-bold text-[#055E83] mb-4">Return Summary</h3>
               <div className="space-y-3">
-                {[["Return Date", "01 Jun 2025"], ["Days Overdue", "0 days"], ["Fine Amount", "$0.00"], ["Condition", condition]].map(([label, val]) => (
-                  <div key={label} className="flex justify-between items-baseline border-b border-gray-50 pb-2.5 last:border-0 last:pb-0">
-                    <span className="text-xs text-gray-400">{label}</span>
-                    <span className="text-xs font-semibold text-gray-700">{val}</span>
+                {[["Return Date", formatDate(new Date())], ["Days Overdue", `${daysOverdue} days`]].map(([label, val]) => (
+                  <div key={label} className="flex justify-between items-baseline border-b border-gray-100 pb-2.5 last:border-0 last:pb-0">
+                    <span className="text-xs text-gray-400 font-semibold">{label}</span>
+                    <span className="text-xs font-bold text-gray-700">{val}</span>
                   </div>
                 ))}
               </div>
             </div>
 
-            <button onClick={onConfirm}
-              className="w-full flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-bold text-white bg-green-600 hover:bg-green-700 transition">
-              <CheckCircle size={15} /> Confirm Return
+            <button onClick={handleConfirm} disabled={submitting}
+              className="w-full flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-bold text-white bg-green-600 hover:bg-green-700 transition shadow-md disabled:opacity-60">
+              <CheckCircle size={15} /> {submitting ? "Processing..." : "Confirm Return"}
             </button>
 
             <button onClick={onCancel}
-              className="w-full py-3 rounded-xl text-sm font-semibold border border-gray-200 text-gray-600 hover:bg-gray-50 transition">
+              className="w-full py-3 rounded-xl text-sm font-bold border-2 border-gray-300 text-gray-600 hover:bg-gray-50 transition bg-white shadow-sm">
               Cancel — Back to Transactions
             </button>
           </div>
@@ -420,115 +746,176 @@ function ReturnBook({ transaction, onCancel, onConfirm }) {
   );
 }
 
-// ─── Page 4: Return Book Detail (Completed) ───────────────────────────────────
-function ReturnBookDetail({ transaction, onBack }) {
+//Page 4: Transaction Detail 
+function ReturnBookDetail({ transactionId, onBack }) {
+  const [t, setT] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    const fetchDetail = async () => {
+      try {
+        setLoading(true);
+        const response = await api.get(`/borrow-records/${transactionId}`);
+        if (!cancelled && response.data?.success) setT(response.data.data);
+      } catch (err) {
+        console.error("Failed to load transaction detail:", err);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+    fetchDetail();
+    return () => { cancelled = true; };
+  }, [transactionId]);
+
+  if (loading || !t) {
+    return (
+      <div>
+        <Navbar title="Transaction Details" breadcrumb="Manage all borrow and return records" />
+        <div className="px-6 py-5">
+          <button onClick={onBack} className="flex items-center gap-2 px-4 py-2 rounded-xl border-2 border-gray-300 text-sm font-bold text-gray-600 hover:bg-gray-50 transition bg-white shadow-sm mb-5">
+            <ArrowLeft size={13} /> Back to Transactions
+          </button>
+          <div className="p-10 text-center text-sm text-gray-400">Loading transaction...</div>
+        </div>
+      </div>
+    );
+  }
+
+  const effectiveStatus = t.status === "Borrowed" && t.isOverdue ? "Overdue" : t.status;
+  const bannerByStatus = {
+    Returned: { bg: "bg-green-50 border-green-200", dot: "bg-green-500", text: "text-green-700", label: "RETURNED", message: `This transaction has been completed. Book was returned on ${formatDate(t.return_date)}.` },
+    Overdue: { bg: "bg-red-50 border-red-200", dot: "bg-red-500", text: "text-red-700", label: "OVERDUE", message: `This book is overdue. It was due on ${formatDate(t.due_date)}.` },
+    Borrowed: { bg: "bg-blue-50 border-blue-200", dot: "bg-blue-500", text: "text-blue-700", label: "ACTIVE", message: `This book is currently borrowed and due on ${formatDate(t.due_date)}.` },
+  };
+  const banner = bannerByStatus[effectiveStatus];
+
+  const duration = t.return_date
+    ? Math.round((new Date(t.return_date) - new Date(t.borrow_date)) / (1000 * 60 * 60 * 24))
+    : Math.round((new Date() - new Date(t.borrow_date)) / (1000 * 60 * 60 * 24));
+
   return (
     <div>
-      <Navbar title="Return Book" breadcrumb="Process a book return" />
+      <Navbar title="Transaction Details" breadcrumb="Manage all borrow and return records" />
       <div className="px-6 py-5">
 
-        {/* Breadcrumb + Back */}
         <div className="flex items-center justify-between mb-5">
           <div className="flex items-center gap-2 text-sm">
-            <span className="text-[#055E83] font-medium cursor-pointer hover:underline" onClick={onBack}>Borrow / Return</span>
+            <span className="text-[#055E83] font-bold cursor-pointer hover:underline" onClick={onBack}>Borrow / Return</span>
             <ChevronRight size={14} className="text-gray-400" />
-            <span className="text-[#055E83] font-medium cursor-pointer hover:underline" onClick={onBack}>Transactions</span>
-            <ChevronRight size={14} className="text-gray-400" />
-            <span className="text-gray-700 font-semibold">{transaction.id}</span>
+            <span className="text-gray-700 font-bold">TXN-{t.borrow_id}</span>
           </div>
-          <button onClick={onBack} className="flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-200 text-sm text-gray-600 hover:bg-gray-50 transition">
+          <button onClick={onBack} className="flex items-center gap-2 px-4 py-2 rounded-xl border-2 border-gray-300 text-sm font-bold text-gray-600 hover:bg-gray-50 transition bg-white shadow-sm">
             <ArrowLeft size={13} /> Back to Transactions
           </button>
         </div>
 
-        {/* Returned banner */}
-        <div className="flex items-center gap-3 bg-green-50 border border-green-200 rounded-xl px-5 py-3.5 mb-5">
-          <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-green-500 text-white">RETURNED</span>
-          <p className="text-sm text-green-700 font-medium">This transaction has been completed. Book was returned on 01 Jun 2025.</p>
+        <div className={`flex items-center gap-3 border-2 rounded-xl px-5 py-3.5 mb-5 shadow-sm ${banner.bg}`}>
+          <span className={`text-xs font-bold px-2.5 py-1 rounded-full text-white ${banner.dot}`}>{banner.label}</span>
+          <p className={`text-sm font-bold ${banner.text}`}>{banner.message}</p>
         </div>
 
         <div className="grid grid-cols-[1fr_280px] gap-5 items-start">
-          {/* Left */}
           <div className="space-y-4">
             {/* Borrower Information */}
-            <div className="bg-white rounded-xl border border-gray-100 p-6" style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.05)" }}>
+            <div className="bg-white rounded-xl border-2 border-gray-300 p-6" style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.12)" }}>
               <h3 className="text-sm font-bold text-[#055E83] flex items-center gap-2 mb-4">
                 <User size={15} /> Borrower Information
               </h3>
-              <div className="border-b border-gray-100 mb-4" />
+              <div className="border-b-2 border-gray-200 mb-4" />
               <div className="grid grid-cols-2 gap-y-4 gap-x-8">
                 {[
-                  ["Member Name", transaction.member],
-                  ["Phone Number", transaction.phone],
-                  ["Member ID", transaction.memberId],
-                  ["Member Type", <span className="text-green-600 font-semibold">{transaction.memberType}</span>],
+                  ["Member Name", t.members?.full_name || "—"],
+                  ["Phone Number", t.members?.phone_number || "—"],
+                  ["Member ID", `#${t.members?.member_id ?? "—"}`],
+                  ["Member Status", <span className={t.members?.status === "Active" ? "text-green-600 font-bold" : "text-red-500 font-bold"}>{t.members?.status || "—"}</span>],
                 ].map(([label, val], i) => (
                   <div key={i}>
-                    <p className="text-xs text-gray-400 mb-0.5">{label}</p>
-                    <p className="text-sm font-semibold text-gray-800">{val}</p>
+                    <p className="text-xs text-gray-400 mb-0.5 font-bold uppercase tracking-wider">{label}</p>
+                    <p className="text-sm font-bold text-gray-800">{val}</p>
                   </div>
                 ))}
               </div>
             </div>
 
             {/* Book Information */}
-            <div className="bg-white rounded-xl border border-gray-100 p-6" style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.05)" }}>
+            <div className="bg-white rounded-xl border-2 border-gray-300 p-6" style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.12)" }}>
               <h3 className="text-sm font-bold text-[#055E83] flex items-center gap-2 mb-4">
                 <BookOpen size={15} /> Book Information
               </h3>
-              <div className="border-b border-gray-100 mb-4" />
-              <div className="grid grid-cols-2 gap-y-4 gap-x-8">
-                {[
-                  ["Book Title", transaction.book],
-                  ["Author", transaction.author],
-                  ["Dewey Code", transaction.deweyCode],
-                  ["Category", transaction.category],
-                ].map(([label, val]) => (
-                  <div key={label}>
-                    <p className="text-xs text-gray-400 mb-0.5">{label}</p>
-                    <p className="text-sm font-semibold text-gray-800">{val}</p>
-                  </div>
-                ))}
+              <div className="border-b-2 border-gray-200 mb-4" />
+              <div className="flex gap-4">
+                <div className="w-20 h-28 rounded-lg border-2 border-gray-300 bg-gray-50 overflow-hidden flex items-center justify-center shrink-0">
+                  {t.books?.cover_image ? (
+                    <img src={`${ASSET_BASE_URL}/uploads/covers/${t.books.cover_image}`} alt={t.books.title} className="w-full h-full object-cover" />
+                  ) : (
+                    <BookOpen size={24} className="text-gray-200" />
+                  )}
+                </div>
+                <div className="flex-1 grid grid-cols-2 gap-y-4 gap-x-8">
+                  {[
+                    ["Book Title", t.books?.title || "—"],
+                    ["Author", t.books?.author || "—"],
+                    ["Dewey Code", t.books?.dewey_code || "—"],
+                    ["Category", t.books?.category || "—"],
+                  ].map(([label, val]) => (
+                    <div key={label}>
+                      <p className="text-xs text-gray-400 mb-0.5 font-bold uppercase tracking-wider">{label}</p>
+                      <p className="text-sm font-bold text-gray-800">{val}</p>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
+
+            {/* Damage Reports, if any exist for this borrow */}
+            {t.damage_reports?.length > 0 && (
+              <div className="bg-white rounded-xl border-2 border-gray-300 p-6" style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.12)" }}>
+                <h3 className="text-sm font-bold text-red-600 flex items-center gap-2 mb-4">
+                  <AlertCircle size={15} /> Damage Reports
+                </h3>
+                <div className="border-b-2 border-gray-200 mb-4" />
+                <div className="space-y-3">
+                  {t.damage_reports.map((d) => (
+                    <div key={d.report_id} className="border-2 border-red-100 bg-red-50/50 rounded-lg p-3">
+                      <div className="flex justify-between items-baseline mb-1">
+                        <span className="text-xs font-bold text-red-600 uppercase">{d.book_condition}</span>
+                        <span className="text-[10px] text-gray-400">{formatDate(d.reported_at)}</span>
+                      </div>
+                      {d.damage_description && <p className="text-xs text-gray-600">{d.damage_description}</p>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
-          {/* Right */}
+          {/* Right Side */}
           <div className="space-y-4">
-            {/* Borrow Timeline */}
-            <div className="bg-white rounded-xl border border-gray-100 p-5" style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.05)" }}>
+            <div className="bg-white rounded-xl border-2 border-gray-300 p-5" style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.12)" }}>
               <h3 className="text-sm font-bold text-gray-700 flex items-center gap-2 mb-4">
                 <CheckCircle size={14} className="text-green-500" /> Borrow Timeline
               </h3>
               <div className="space-y-3">
-                {[["Borrow Date", transaction.borrowDate], ["Due Date", transaction.dueDate], ["Return Date", "14 Jun 2025"], ["Duration", "13 days"]].map(([label, val]) => (
-                  <div key={label} className="flex justify-between border-b border-gray-50 pb-2.5 last:border-0">
-                    <span className="text-xs text-gray-400">{label}</span>
-                    <span className="text-xs font-semibold text-gray-700">{val}</span>
+                {[
+                  ["Borrow Date", formatDate(t.borrow_date)],
+                  ["Due Date", formatDate(t.due_date)],
+                  ["Return Date", t.return_date ? formatDate(t.return_date) : "Not yet returned"],
+                  ["Duration", `${duration} day${duration === 1 ? "" : "s"}`],
+                ].map(([label, val]) => (
+                  <div key={label} className="flex justify-between border-b border-gray-100 pb-2.5 last:border-0 last:pb-0">
+                    <span className="text-xs text-gray-400 font-semibold">{label}</span>
+                    <span className="text-xs font-bold text-gray-700">{val}</span>
                   </div>
                 ))}
               </div>
             </div>
 
-            {/* Fine Information */}
-            <div className="bg-white rounded-xl border border-gray-100 p-5" style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.05)" }}>
-              <h3 className="text-sm font-bold text-gray-700 flex items-center gap-2 mb-4">
-                <DollarSign size={14} className="text-yellow-500" /> Fine Information
-              </h3>
-              <div className="space-y-3">
-                {[
-                  ["Days Overdue", <span className="text-blue-600 font-bold">0 days</span>],
-                  ["Fine Rate",    <span className="text-blue-600 font-bold">$0.50/day</span>],
-                  ["Total Fine",   <span className="text-blue-600 font-bold">$0.00</span>],
-                  ["Book Condition", <span className="text-green-600 font-bold">Good</span>],
-                  ["Processed By",  <span className="text-green-600 font-bold">Admin</span>],
-                ].map(([label, val], i) => (
-                  <div key={i} className="flex justify-between border-b border-gray-50 pb-2.5 last:border-0">
-                    <span className="text-xs text-gray-400">{label}</span>
-                    <span className="text-xs font-semibold text-gray-700">{val}</span>
-                  </div>
-                ))}
-              </div>
+            <div className="bg-white rounded-xl border-2 border-gray-300 p-5" style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.12)" }}>
+              <h3 className="text-sm font-bold text-gray-700 mb-4">Processed By</h3>
+              <p className="text-sm font-bold text-gray-800">
+                {t.users ? `${t.users.first_name} ${t.users.last_name}` : "System"}
+              </p>
             </div>
           </div>
         </div>
@@ -537,30 +924,31 @@ function ReturnBookDetail({ transaction, onBack }) {
   );
 }
 
-// ─── Main Router ──────────────────────────────────────────────────────────────
+// Main Router 
 export default function BorrowReturn() {
   const [page, setPage] = useState("list");
   const [selected, setSelected] = useState(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  const backToList = () => { setPage("list"); setSelected(null); setRefreshKey((k) => k + 1); };
 
   const render = () => {
-    if (page === "new")    return <NewBorrow onCancel={() => setPage("list")} onSave={() => setPage("list")} />;
-    if (page === "return" && selected) return <ReturnBook transaction={selected} onCancel={() => setPage("list")} onConfirm={() => setPage("list")} />;
-    if (page === "detail" && selected) return <ReturnBookDetail transaction={selected} onBack={() => setPage("list")} />;
+    if (page === "new") return <NewBorrow onCancel={backToList} onSave={backToList} />;
+    if (page === "return" && selected) return <ReturnBook transaction={selected} onCancel={backToList} onConfirm={backToList} />;
+    if (page === "detail" && selected) return <ReturnBookDetail transactionId={selected} onBack={backToList} />;
     return (
       <TransactionList
+        refreshKey={refreshKey}
         onNewBorrow={() => setPage("new")}
-        onViewDetails={(t) => { setSelected(t); setPage("detail"); }}
+        onViewDetails={(borrowId) => { setSelected(borrowId); setPage("detail"); }}
         onReturn={(t) => { setSelected(t); setPage("return"); }}
       />
     );
   };
 
   return (
-    <div className="flex h-screen overflow-hidden antialiased">
-      <Sidebar />
-      <main className="flex-1 overflow-y-auto overflow-x-hidden bg-[#F8FAFC]">
+    <div className="flex-1 min-w-0 bg-[#E9EEF4]">
         {render()}
-      </main>
     </div>
   );
 }

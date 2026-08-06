@@ -1,6 +1,5 @@
 generator client {
   provider = "prisma-client-js"
-  output   = "../generated/prisma"
 }
 
 datasource db {
@@ -11,13 +10,19 @@ model books {
   book_id          Int              @id @default(autoincrement())
   title            String           @db.VarChar(255)
   author           String           @db.VarChar(150)
+  publisher        String?          @db.VarChar(150)
   dewey_code       String           @db.VarChar(20)
-  section          books_section
+  isbn             String?          @db.VarChar(20)
+  language         books_language
+  category         String           @db.VarChar(100)
+  section          String?          @db.VarChar(20)
   publication_year Int?
   total_copies     Int?             @default(1)
   available_copies Int?             @default(1)
   is_borrowable    Boolean?         @default(true)
   added_at         DateTime         @default(now()) @db.Timestamp(0)
+  description      String?          @db.Text
+  cover_image      String?          @db.VarChar(255)
   borrow_records   borrow_records[]
   damage_reports   damage_reports[]
 }
@@ -59,18 +64,27 @@ model damage_reports {
 }
 
 model donations {
-  donation_id     Int                     @id @default(autoincrement())
-  donor_name      String?                 @default("Anonymous") @db.VarChar(150)
-  amount          Decimal?                @db.Decimal(10, 2)
-  book_title      String?                 @db.VarChar(255)
-  book_author     String?                 @db.VarChar(150)
-  book_dewey_code String?                 @db.VarChar(20)
-  book_section    donations_book_section?
-  received_by     Int
-  donation_date   DateTime                @default(now()) @db.Timestamp(0)
-  users           users                   @relation(fields: [received_by], references: [user_id], onUpdate: Restrict, map: "donations_ibfk_1")
+  donation_id   Int              @id @default(autoincrement())
+  donor_name    String?          @default("Anonymous") @db.VarChar(150)
+  amount        Decimal?         @db.Decimal(10, 2)
+  received_by   Int
+  donation_date DateTime         @default(now()) @db.Timestamp(0)
+  items         donation_items[]
+  users         users            @relation(fields: [received_by], references: [user_id], onUpdate: Restrict, map: "donations_ibfk_1")
 
   @@index([received_by], map: "received_by")
+}
+
+model donation_items {
+  item_id     Int       @id @default(autoincrement())
+  donation_id Int
+  title       String    @db.VarChar(255)
+  author      String    @db.VarChar(150)
+  dewey_code  String    @db.VarChar(20)
+  section     String?   @db.VarChar(20)
+  donation    donations @relation(fields: [donation_id], references: [donation_id], onDelete: Cascade, map: "fk_donation_items_donation")
+
+  @@index([donation_id], map: "donation_id")
 }
 
 model events {
@@ -82,23 +96,37 @@ model events {
   event_time     DateTime              @db.Time(0)
   max_attendance Int?
   event_image    String?               @db.VarChar(255)
+  location       String?               @db.VarChar(255)
 }
 
 model feedback {
   feedback_id   Int              @id @default(autoincrement())
   user_name     String?          @db.VarChar(50)
+  email         String?          @db.VarChar(100)
   source        feedback_source
   comment       String           @db.Text
   rating        Int
   feedback_date DateTime         @default(now()) @db.Timestamp(0)
   status        feedback_status? @default(pending)
+  admin_reply   String?          @db.Text
 }
 
 model library_entries {
-  entry_id      Int      @id @default(autoincrement())
-  attendee_name String   @db.VarChar(150)
+  entry_id      Int                      @id @default(autoincrement())
+  attendee_name String                   @db.VarChar(150)
   age           Int
-  entry_time    DateTime @default(now()) @db.Timestamp(0)
+  address       String?                  @db.VarChar(255)
+  phone_number  String?                  @db.VarChar(15)
+  purpose       library_entries_purpose?
+  entry_time    DateTime                 @default(now()) @db.Timestamp(0)
+}
+model library_settings {
+  setting_id           Int      @id @default(1)
+  max_books_per_member Int      @default(2)
+  borrow_duration_days Int      @default(14)
+  renewal_limit        Int      @default(2)
+  fine_per_day         Decimal  @default(0.25) @db.Decimal(6, 2)
+  updated_at           DateTime @default(now()) @updatedAt @db.Timestamp(0)
 }
 
 model members {
@@ -106,7 +134,7 @@ model members {
   full_name          String            @db.VarChar(150)
   date_of_birth      DateTime          @db.Date
   phone_number       String?           @db.VarChar(15)
-  email              String            @unique(map: "email") @db.VarChar(100)
+  email              String?           @unique(map: "email") @db.VarChar(100)
   membership_type_id Int?
   status             members_status?   @default(Active)
   expiration_date    DateTime?         @db.Date
@@ -174,6 +202,14 @@ model users {
   @@index([role_id], map: "role_id")
 }
 
+enum library_entries_purpose {
+  Research
+  Study
+  Reading
+  Event
+  Other
+}
+
 enum notifications_recipient_type {
   User
   Member
@@ -193,31 +229,6 @@ enum feedback_source {
   general
 }
 
-enum books_section {
-  K1
-  KK1
-  E1
-  EK1
-  F1
-  FK1
-  Inter1
-}
-
-enum damage_reports_book_condition {
-  Fair
-  Damaged
-}
-
-enum donations_book_section {
-  K1
-  KK1
-  E1
-  EK1
-  F1
-  FK1
-  Inter1
-}
-
 enum feedback_status {
   pending
   replied
@@ -233,4 +244,16 @@ enum borrow_records_status {
   Borrowed
   Returned
   Overdue
+}
+
+enum books_language {
+  Khmer
+  English
+  French
+}
+
+enum damage_reports_book_condition {
+  Fair
+  Damaged
+  Lost
 }

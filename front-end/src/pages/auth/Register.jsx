@@ -1,27 +1,69 @@
 import { useState } from "react";
-import { User, Calendar, Phone, Mail, Lock, Eye, EyeOff, ArrowRight, ChevronDown } from "lucide-react";
-import { Link } from "react-router-dom";
+import { User, Phone, Mail, Lock, Eye, EyeOff, ArrowRight, AlertCircle } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
+import api from "../../utils/api";
 
 export default function Register() {
+  const navigate = useNavigate();
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({
-    fullName: "",
-    dob: "",
-    gender: "",
+    firstName: "",
+    lastName: "",
     phone: "",
     email: "",
     password: "",
     confirmPassword: "",
   });
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    // TODO: connect to backend
-    console.log("Register:", form);
-  };
-
   const update = (field) => (e) => setForm({ ...form, [field]: e.target.value });
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (loading) return;
+
+    const firstName = form.firstName.trim();
+    const lastName = form.lastName.trim();
+
+    if (!firstName || !lastName || !form.email.trim() || !form.password) {
+      setError("Please fill in your first name, last name, email, and password.");
+      return;
+    }
+    if (form.password.length < 6) {
+      setError("Password must be at least 6 characters long.");
+      return;
+    }
+    if (form.password !== form.confirmPassword) {
+      setError("Passwords do not match.");
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const response = await api.post("/auth/register", {
+        firstName,
+        lastName,
+        email: form.email.trim(),
+        phone: form.phone.trim() || null,
+        password: form.password,
+      });
+
+      if (response.data?.success) {
+        // Account is created but we deliberately don't log the user in here -
+        // send them to Login.jsx instead, which reads this state to show a
+        // "registered successfully" banner and pre-fill the email field.
+        navigate("/login", { state: { registered: true, email: form.email.trim() } });
+      }
+    } catch (err) {
+      console.error("Registration failed:", err);
+      const backendMessage = err.response?.data?.error || err.response?.data?.message;
+      setError(backendMessage || "Registration failed. Please check your details and try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] flex flex-col items-center justify-start px-4 py-12">
@@ -35,7 +77,14 @@ export default function Register() {
       </div>
 
       {/* Card */}
-      <div className="bg-white rounded-2xl shadow-[0_4px_24px_rgba(0,0,0,0.08)] w-full max-w-2xl p-10 space-y-8">
+      <form onSubmit={handleSubmit} className="bg-white rounded-2xl shadow-[0_4px_24px_rgba(0,0,0,0.08)] w-full max-w-2xl p-10 space-y-8">
+
+        {error && (
+          <div className="flex items-start gap-2.5 bg-red-50 border border-red-200 text-red-600 text-sm rounded-xl px-4 py-3">
+            <AlertCircle size={16} className="shrink-0 mt-0.5" />
+            <span>{error}</span>
+          </div>
+        )}
 
         {/* Personal Information */}
         <div>
@@ -45,66 +94,55 @@ export default function Register() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
 
-            {/* Full Name */}
+            {/* First Name */}
             <div>
-              <label className="block text-sm font-medium text-[#055E83] mb-1.5">Full Name</label>
+              <label htmlFor="firstName" className="block text-sm font-medium text-[#055E83] mb-1.5">First Name</label>
               <div className="flex items-center bg-[#F1F5F9] border border-[#CBD5E1] rounded-xl px-4 py-3 gap-3 focus-within:border-[#055E83] transition">
                 <User size={15} className="text-[#055E83] shrink-0" />
                 <input
+                  id="firstName"
+                  name="firstName"
                   type="text"
-                  placeholder="Enter your full legal name"
-                  value={form.fullName}
-                  onChange={update("fullName")}
+                  placeholder="e.g. Sokha"
+                  value={form.firstName}
+                  onChange={update("firstName")}
                   className="flex-1 text-sm outline-none text-[#1E293B] bg-transparent placeholder-[#64748B]"
                 />
               </div>
             </div>
 
-            {/* Date of Birth */}
+            {/* Last Name */}
             <div>
-              <label className="block text-sm font-medium text-[#055E83] mb-1.5">Date of Birth</label>
+              <label htmlFor="lastName" className="block text-sm font-medium text-[#055E83] mb-1.5">Last Name</label>
               <div className="flex items-center bg-[#F1F5F9] border border-[#CBD5E1] rounded-xl px-4 py-3 gap-3 focus-within:border-[#055E83] transition">
-                <Calendar size={15} className="text-[#055E83] shrink-0" />
+                <User size={15} className="text-[#055E83] shrink-0" />
                 <input
-                  type="date"
-                  value={form.dob}
-                  onChange={update("dob")}
+                  id="lastName"
+                  name="lastName"
+                  type="text"
+                  placeholder="e.g. Chen"
+                  value={form.lastName}
+                  onChange={update("lastName")}
                   className="flex-1 text-sm outline-none text-[#1E293B] bg-transparent placeholder-[#64748B]"
                 />
               </div>
             </div>
+          </div>
 
-            {/* Gender */}
-            <div>
-              <label className="block text-sm font-medium text-[#055E83] mb-1.5">Gender</label>
-              <div className="flex items-center bg-[#F1F5F9] border border-[#CBD5E1] rounded-xl px-4 py-3 gap-3 focus-within:border-[#055E83] transition">
-                <select
-                  value={form.gender}
-                  onChange={update("gender")}
-                  className="flex-1 text-sm outline-none text-[#1E293B] bg-transparent appearance-none"
-                >
-                  <option value="">Select gender</option>
-                  <option value="male">Male</option>
-                  <option value="female">Female</option>
-                  <option value="other">Other</option>
-                </select>
-                <ChevronDown size={15} className="text-[#055E83] shrink-0 pointer-events-none" />
-              </div>
-            </div>
-
-            {/* Phone Number */}
-            <div>
-              <label className="block text-sm font-medium text-[#055E83] mb-1.5">Phone Number</label>
-              <div className="flex items-center bg-[#F1F5F9] border border-[#CBD5E1] rounded-xl px-4 py-3 gap-3 focus-within:border-[#055E83] transition">
-                <Phone size={15} className="text-[#055E83] shrink-0" />
-                <input
-                  type="tel"
-                  placeholder="+855 xx xxx xxxx"
-                  value={form.phone}
-                  onChange={update("phone")}
-                  className="flex-1 text-sm outline-none text-[#1E293B] bg-transparent placeholder-[#64748B]"
-                />
-              </div>
+          {/* Phone Number */}
+          <div className="mt-5">
+            <label htmlFor="phone" className="block text-sm font-medium text-[#055E83] mb-1.5">Phone Number (Optional)</label>
+            <div className="flex items-center bg-[#F1F5F9] border border-[#CBD5E1] rounded-xl px-4 py-3 gap-3 focus-within:border-[#055E83] transition">
+              <Phone size={15} className="text-[#055E83] shrink-0" />
+              <input
+                id="phone"
+                name="phone"
+                type="tel"
+                placeholder="+855 xx xxx xxxx"
+                value={form.phone}
+                onChange={update("phone")}
+                className="flex-1 text-sm outline-none text-[#1E293B] bg-transparent placeholder-[#64748B]"
+              />
             </div>
           </div>
         </div>
@@ -122,12 +160,14 @@ export default function Register() {
 
             {/* Email */}
             <div>
-              <label className="block text-sm font-medium text-[#055E83] mb-1.5">
+              <label htmlFor="email" className="block text-sm font-medium text-[#055E83] mb-1.5">
                 Library ID / Email Address
               </label>
               <div className="flex items-center bg-[#F1F5F9] border border-[#CBD5E1] rounded-xl px-4 py-3 gap-3 focus-within:border-[#055E83] transition">
                 <Mail size={15} className="text-[#055E83] shrink-0" />
                 <input
+                  id="email"
+                  name="email"
                   type="email"
                   placeholder="id@bannalay.edu.kh"
                   value={form.email}
@@ -141,12 +181,14 @@ export default function Register() {
 
               {/* Password */}
               <div>
-                <label className="block text-sm font-medium text-[#055E83] mb-1.5">Password</label>
+                <label htmlFor="password" className="block text-sm font-medium text-[#055E83] mb-1.5">Password</label>
                 <div className="flex items-center bg-[#F1F5F9] border border-[#CBD5E1] rounded-xl px-4 py-3 gap-3 focus-within:border-[#055E83] transition">
                   <Lock size={15} className="text-[#055E83] shrink-0" />
                   <input
+                    id="password"
+                    name="password"
                     type={showPassword ? "text" : "password"}
-                    placeholder="Min. 8 characters"
+                    placeholder="Min. 6 characters"
                     value={form.password}
                     onChange={update("password")}
                     className="flex-1 text-sm outline-none text-[#1E293B] bg-transparent placeholder-[#64748B]"
@@ -159,10 +201,12 @@ export default function Register() {
 
               {/* Confirm Password */}
               <div>
-                <label className="block text-sm font-medium text-[#055E83] mb-1.5">Confirm Password</label>
+                <label htmlFor="confirmPassword" className="block text-sm font-medium text-[#055E83] mb-1.5">Confirm Password</label>
                 <div className="flex items-center bg-[#F1F5F9] border border-[#CBD5E1] rounded-xl px-4 py-3 gap-3 focus-within:border-[#055E83] transition">
                   <Lock size={15} className="text-[#055E83] shrink-0" />
                   <input
+                    id="confirmPassword"
+                    name="confirmPassword"
                     type={showConfirm ? "text" : "password"}
                     placeholder="Re-enter your password"
                     value={form.confirmPassword}
@@ -188,6 +232,10 @@ export default function Register() {
         {/* Google Button */}
         <button
           type="button"
+          onClick={() => {
+            // Add your Google auth logic here
+            console.log("Google registration clicked");
+          }}
           className="w-full border border-[#CBD5E1] bg-white rounded-xl py-3 flex items-center justify-center gap-2 text-sm font-medium text-[#1E293B] hover:bg-gray-50 transition"
         >
           <span className="text-blue-500 font-bold text-base">G</span>
@@ -196,12 +244,13 @@ export default function Register() {
 
         {/* Create Account Button */}
         <button
-          onClick={handleSubmit}
-          className="w-full bg-[#E8C110] hover:opacity-90 text-[#055E83] font-bold py-3.5 rounded-xl flex items-center justify-center gap-2 transition"
+          type="submit"
+          disabled={loading}
+          className="w-full bg-[#E8C110] hover:opacity-90 text-[#055E83] font-bold py-3.5 rounded-xl flex items-center justify-center gap-2 transition disabled:opacity-60"
         >
-          Create Account <ArrowRight size={18} />
+          {loading ? "Creating Account..." : "Create Account"} {!loading && <ArrowRight size={18} />}
         </button>
-      </div>
+      </form>
 
       {/* Footer */}
       <div className="mt-8 text-xs text-[#64748B] flex gap-4">

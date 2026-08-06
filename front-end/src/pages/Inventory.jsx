@@ -1,25 +1,107 @@
-import { useState } from "react";
-import { Upload, Image as ImageIcon, Edit2, Trash2, ChevronRight, X, AlertTriangle, Library, Plus, Search, Filter, ArrowUpDown, ChevronLeft } from "lucide-react";
+import { useState, useEffect } from "react";
+import {
+  Upload, Image as ImageIcon, Edit2, Trash2, ChevronRight, X, AlertTriangle,
+  Library, Plus, Search, Filter, ArrowUpDown, ChevronLeft, CheckCircle2,
+  Clock, XCircle, Eye,
+} from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
-import Sidebar from "../components/Adminsidebar";
 import Navbar from "../components/Navbar";
+import api, { ASSET_BASE_URL } from "../utils/api";
 
+const LANGUAGES = ["All Languages", "Khmer", "English", "French"];
+const CATEGORIES = [
+  "All Categories",
+  "Computer Science, Information & General Works",
+  "Philosophy & Psychology",
+  "Religion",
+  "Social Sciences",
+  "Language",
+  "Science",
+  "Technology",
+  "Arts & Recreation",
+  "Literature",
+  "History & Geography"
+];
+const STATUSES = ["All Status", "AVAILABLE", "BORROWED", "LOW STOCK", "OUT OF STOCK"];
 
-export function DeleteBookModal({ isOpen, onClose, onConfirm, book }) {
-  if (!isOpen || !book) return null;
+// Same 10 Dewey Decimal main classes as booksController.js's list — kept
+// identical so the form preview always matches what the backend will
+// actually save. The backend is the source of truth; this is a preview.
+const DDC_CATEGORIES = [
+  "Computer Science, Information & General Works", // 000–099
+  "Philosophy & Psychology",                        // 100–199
+  "Religion",                                        // 200–299
+  "Social Sciences",                                 // 300–399
+  "Language",                                        // 400–499
+  "Science",                                          // 500–599
+  "Technology",                                       // 600–699
+  "Arts & Recreation",                                // 700–799
+  "Literature",                                       // 800–899
+  "History & Geography",                              // 900–999
+];
+
+function categoryFromDeweyCode(rawCode) {
+  if (!rawCode) return "";
+  const match = String(rawCode).trim().match(/^(\d{1,3})/);
+  if (!match) return "";
+  const wholePart = match[1].padEnd(3, "0").slice(0, 3);
+  const mainClass = Math.floor(Number(wholePart) / 100);
+  return DDC_CATEGORIES[mainClass] || "";
+}
+
+//Shared Theme Constants (matched to Feedback page style)
+const HEAD_COLOR = "#055E83"; // kept as the Inventory module's table-head color
+const cardShadow = { boxShadow: "0 2px 12px rgba(0,0,0,0.12)" };
+const filterPillCls = "flex items-center gap-2 bg-white border-2 border-gray-300 rounded-lg px-3 py-2";
+
+const inputCls = "w-full border-2 border-gray-300 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#055E83] transition text-gray-800 bg-white placeholder-gray-400";
+const labelCls = "block text-xs font-bold text-gray-500 mb-1.5";
+
+//Status Badge (icon + tint, Feedback-style) 
+const inventoryStatusStyle = {
+  "AVAILABLE":    { bg: "#E8F5E9", text: "#2E7D32", icon: CheckCircle2 },
+  "BORROWED":     { bg: "#FFFDE7", text: "#B78103", icon: Clock },
+  "LOW STOCK":    { bg: "#FFF3E0", text: "#E65100", icon: AlertTriangle },
+  "OUT OF STOCK": { bg: "#FFEBEE", text: "#C62828", icon: XCircle },
+};
+
+function StatusBadge({ status }) {
+  const key = (status || "").toUpperCase();
+  const s = inventoryStatusStyle[key] || inventoryStatusStyle["AVAILABLE"];
+  const Icon = s.icon;
+  return (
+    <span className="inline-block text-[11px] font-bold px-2.5 py-1 rounded-md text-center"
+      style={{ backgroundColor: s.bg, color: s.text }}>
+      <span className="inline-flex items-center gap-1"><Icon size={11} /> {status}</span>
+    </span>
+  );
+}
+
+function BorrowableBadge({ on }) {
+  return on ? (
+    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-bold bg-green-50 text-green-700 border-2 border-green-100">
+      <span className="w-1.5 h-1.5 rounded-full bg-green-600" /> ON
+    </span>
+  ) : (
+    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-bold bg-red-50 text-red-600 border-2 border-red-100">
+      <span className="w-1.5 h-1.5 rounded-full bg-red-500" /> OFF
+    </span>
+  );
+}
+
+export function SuccessModal({ isOpen, onClose, title, message }) {
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
-      {/* Viewport breakout overlay drop mask */}
       <div
         className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs transition-opacity duration-200"
         onClick={onClose}
       />
-
-      {/* Structured Warning Panel Box */}
-      <div className="relative bg-white rounded-2xl max-w-md w-full shadow-2xl border border-gray-100 overflow-hidden p-6 z-10 animate-in fade-in zoom-in-95 duration-150 flex flex-col">
-
-        {/* Absolute Exit cross icon trigger */}
+      <div
+        className="relative bg-white rounded-2xl max-w-md w-full shadow-2xl border-2 border-gray-300 overflow-hidden p-6 z-10 animate-in fade-in zoom-in-95 duration-150 flex flex-col"
+        style={cardShadow}
+      >
         <button
           onClick={onClose}
           className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 p-1.5 rounded-lg hover:bg-gray-50 transition"
@@ -27,327 +109,709 @@ export function DeleteBookModal({ isOpen, onClose, onConfirm, book }) {
           <X size={16} />
         </button>
 
-        {/* Coral Trash Emblem */}
         <div className="mb-4">
-          <div className="w-12 h-12 bg-red-50 rounded-xl flex items-center justify-center text-red-500 border border-red-100 shadow-3xs">
+          <div className="w-12 h-12 bg-green-50 rounded-xl flex items-center justify-center text-green-600 border-2 border-green-100">
+            <CheckCircle2 size={20} />
+          </div>
+        </div>
+
+        <h3 className="text-base font-black text-gray-900 mb-1">{title || "Success"}</h3>
+        <p className="text-xs font-bold text-gray-400 mb-6 leading-relaxed">{message}</p>
+
+        <button
+          type="button"
+          onClick={onClose}
+          className="w-full py-2.5 rounded-xl text-xs font-black text-white hover:opacity-95 transition tracking-wide shadow-sm"
+          style={{ backgroundColor: HEAD_COLOR }}
+        >
+          Done
+        </button>
+      </div>
+    </div>
+  );
+}
+
+const PAGE_SIZE = 10; // matches booksController.js's own default limit
+
+export function Inventory() {
+  const navigate = useNavigate();
+  const [view, setView] = useState("list");
+  const [books, setBooks] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const [search, setSearch] = useState("");
+  const [category, setCategory] = useState("All Categories");
+  const [language, setLanguage] = useState("All Languages");
+  const [status, setStatus] = useState("All Status");
+
+  const [page, setPage] = useState(1);
+  const [totalItems, setTotalItems] = useState(0);
+
+  const [liveStats, setLiveStats] = useState({
+    totalBooks: 0,
+    availableCopies: 0,
+    borrowedCopies: 0,
+    availabilityRate: 0,
+  });
+
+  const [selectedBook, setSelectedBook] = useState(null);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+
+  useEffect(() => {
+    fetchBooks();
+    fetchStats();
+  }, [search, category, language, status, page]);
+
+  const fetchBooks = async () => {
+    try {
+      setLoading(true);
+      const params = new URLSearchParams();
+      if (search) params.append("search", search);
+      if (category !== "All Categories") params.append("category", category);
+      if (language !== "All Languages") params.append("language", language);
+      if (status !== "All Status") params.append("status", status);
+      params.append("page", page);
+      params.append("limit", PAGE_SIZE);
+
+      const response = await api.get(`/books?${params.toString()}`);
+      if (response.data?.success) {
+        setBooks(response.data.data);
+        const meta = response.data.meta || {};
+        setTotalItems(meta.totalItems ?? meta.total ?? meta.totalCount ?? response.data.data.length);
+      }
+    } catch (err) {
+      console.error("Failed to load inventory books data:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchStats = async () => {
+    try {
+      const response = await api.get("/books/stats");
+      if (response.data?.success) {
+        setLiveStats(response.data.data);
+      }
+    } catch (err) {
+      console.error("Failed to fetch library inventory stats:", err);
+    }
+  };
+
+  const openDeleteProcess = (book, e) => {
+    e.stopPropagation();
+    setSelectedBook(book);
+    setIsDeleteModalOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    try {
+      await api.delete(`/books/${selectedBook.book_id}`);
+      fetchBooks();
+      fetchStats();
+    } catch (err) {
+      console.error("Failed to delete book:", err);
+      const backendMessage = err.response?.data?.error || err.response?.data?.message;
+      alert(backendMessage || "Failed to delete book. It may have existing borrow history.");
+    } finally {
+      setIsDeleteModalOpen(false);
+    }
+  };
+
+  const gridLayout = "grid grid-cols-[55px_1.6fr_1.2fr_1fr_1fr_1.4fr_80px_80px_1fr_1.2fr_140px] items-center gap-2 px-6";
+
+  const displayStats = [
+    { label: "Total Books", value: liveStats.totalBooks.toLocaleString(), sub: "Total Unique Titles", subColor: "#16A34A", border: HEAD_COLOR },
+    { label: "Available Copies", value: liveStats.availableCopies.toLocaleString(), sub: `${liveStats.availabilityRate}% availability rate`, subColor: "#16A34A", border: "#22C55E" },
+    { label: "Currently Borrowed", value: liveStats.borrowedCopies.toLocaleString(), sub: `${liveStats.overdueCount || 0} overdue returns`, subColor: "#EF4444", border: "#F97316" },
+    { label: "System Sections", value: liveStats.sectionsInUse || "0", sub: "Active physical shelves", subColor: "#71717A", border: "#E8C110" },
+  ];
+
+  const totalPages = Math.max(1, Math.ceil(totalItems / PAGE_SIZE));
+
+  return (
+    <>
+      {view === "add" ? (
+        <main className="flex-1 select-none bg-[#E9EEF4]">
+          <AddBook onCancel={() => { setView("list"); fetchBooks(); fetchStats(); }} />
+        </main>
+      ) : (
+        <main className="flex-1 select-none bg-[#E9EEF4]">
+          <Navbar title="Inventory" breadcrumb="Welcome back, Admin!" />
+
+          <div className="px-6 py-5 space-y-4">
+            <div className="grid grid-cols-4 gap-3">
+              {displayStats.map(({ label, value, sub, subColor, border }) => (
+                <div key={label} className="bg-white rounded-xl px-5 py-4 border-2 border-gray-300" style={{ borderTop: `4px solid ${border}`, ...cardShadow }}>
+                  <p className="text-xs text-gray-400 mb-1 font-bold">{label}</p>
+                  <p className="text-2xl font-bold leading-tight text-gray-800">{value}</p>
+                  <p className="text-xs mt-1 font-bold" style={{ color: subColor }}>{sub}</p>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex items-center gap-3 flex-wrap">
+              <div className="flex-1 min-w-[260px]">
+                <div className={filterPillCls}>
+                  <Search size={14} className="text-gray-400 shrink-0" />
+                  <input
+                    value={search}
+                    onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+                    placeholder="Search by title, author, Dewey code..."
+                    className="text-xs outline-none w-full bg-transparent text-gray-600 placeholder-gray-400"
+                  />
+                </div>
+              </div>
+              <div className={filterPillCls}>
+                <Filter size={13} className="text-gray-400" />
+                <select value={category} onChange={(e) => { setCategory(e.target.value); setPage(1); }} className="text-xs outline-none bg-transparent text-gray-600 font-bold cursor-pointer">
+                  {CATEGORIES.map((c) => <option key={c}>{c}</option>)}
+                </select>
+              </div>
+              <div className={filterPillCls}>
+                <Filter size={13} className="text-gray-400" />
+                <select value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }} className="text-xs outline-none bg-transparent text-gray-600 font-bold cursor-pointer">
+                  {STATUSES.map((s) => <option key={s}>{s}</option>)}
+                </select>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-xl overflow-hidden border-2 border-gray-300" style={cardShadow}>
+              <div className="flex items-center justify-between px-5 py-3.5" style={{ backgroundColor: HEAD_COLOR }}>
+                <h2 className="text-white font-bold text-sm flex items-center gap-2"><Library size={15} /> Book Catalog</h2>
+                <button onClick={() => navigate("/inventory/add")} className="flex items-center gap-1.5 px-4 py-1.5 rounded-md text-xs font-bold transition hover:opacity-95 bg-[#E8C110] text-[#1B4965]">
+                  <Plus size={12} /> Add Book
+                </button>
+              </div>
+
+              <div className="overflow-x-auto w-full">
+                <div style={{ minWidth: "1200px" }}>
+                  <div className={`${gridLayout} py-3 border-b-2 border-gray-300 bg-gray-50/70 text-[11px] font-bold uppercase`} style={{ color: HEAD_COLOR }}>
+                    <span>ID</span><span>Title</span><span>Author</span><span>Dewey Code</span>
+                    <span>Language</span>
+                    <span>Category</span><span>Copies</span><span>Section</span><span>Borrowable</span>
+                    <span className="text-center">Status</span><span className="text-center">Actions</span>
+                  </div>
+
+                  {loading ? (
+                    <div className="p-10 text-center text-gray-500 font-medium">Loading books from system inventory...</div>
+                  ) : books.length > 0 ? books.map((book) => (
+                    <div key={book.book_id} className={`${gridLayout} py-4 border-b border-gray-200 hover:bg-slate-50/60 transition text-xs text-gray-600`}>
+                      <span className="font-mono font-bold">{book.book_id}</span>
+                      <span className="font-bold text-gray-900 truncate">{book.title}</span>
+                      <span className="text-gray-500 truncate">{book.author}</span>
+                      <span className="font-mono">{book.dewey_code}</span>
+                      <span className="font-semibold text-gray-700">{book.language}</span>
+                      <span className="truncate">{book.category}</span>
+                      <span className="font-bold">{book.available_copies} / {book.total_copies}</span>
+                      <span className="font-mono">{book.section || "N/A"}</span>
+                      <div><BorrowableBadge on={book.is_borrowable} /></div>
+                      <div className="text-center"><StatusBadge status={book.status} /></div>
+                      <div className="flex justify-center gap-1.5">
+                        <button onClick={() => navigate(`/inventory/${book.book_id}`)} className="px-2.5 py-1.5 rounded bg-[#055E83] text-white"><Eye size={12} /></button>
+                        <button onClick={() => navigate(`/inventory/${book.book_id}/edit`)} className="px-2.5 py-1.5 rounded bg-[#E8C110] text-[#1B4965]"><Edit2 size={12} /></button>
+                        <button onClick={(e) => openDeleteProcess(book, e)} className="px-2.5 py-1.5 rounded bg-red-50 text-red-500 border border-red-100"><Trash2 size={12} /></button>
+                      </div>
+                    </div>
+                  )) : <div className="p-10 text-center text-gray-400">No books found matching your criteria.</div>}
+                </div>
+              </div>
+            </div>
+
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between pt-1">
+                <p className="text-xs text-gray-400 font-bold">
+                  Showing {books.length ? (page - 1) * PAGE_SIZE + 1 : 0}–{Math.min(page * PAGE_SIZE, totalItems)} of {totalItems.toLocaleString()} books
+                </p>
+                <div className="flex items-center gap-2">
+                  <button
+                    disabled={page === 1}
+                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                    className="p-2 border-2 border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-40 transition bg-white"
+                  >
+                    <ChevronLeft size={14} className="text-gray-500" />
+                  </button>
+                  <span className="text-xs text-gray-500 font-bold px-2">Page {page} of {totalPages}</span>
+                  <button
+                    disabled={page === totalPages}
+                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                    className="p-2 border-2 border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-40 transition bg-white"
+                  >
+                    <ChevronRight size={14} className="text-gray-500" />
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </main>
+      )}
+
+      <DeleteBookModal
+        isOpen={isDeleteModalOpen}
+        onClose={() => setIsDeleteModalOpen(false)}
+        onConfirm={handleDeleteConfirm}
+        book={selectedBook}
+      />
+    </>
+  );
+}
+
+//Delete Modal 
+export function DeleteBookModal({ isOpen, onClose, onConfirm, book }) {
+  if (!isOpen || !book) return null;
+
+  return (
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
+      <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs transition-opacity duration-200" onClick={onClose} />
+      <div className="relative bg-white rounded-2xl max-w-md w-full shadow-2xl border-2 border-gray-300 overflow-hidden p-6 z-10 animate-in fade-in zoom-in-95 duration-150 flex flex-col" style={cardShadow}>
+        <button onClick={onClose} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 p-1.5 rounded-lg hover:bg-gray-50 transition">
+          <X size={16} />
+        </button>
+
+        <div className="mb-4">
+          <div className="w-12 h-12 bg-red-50 rounded-xl flex items-center justify-center text-red-500 border-2 border-red-100">
             <Trash2 size={18} />
           </div>
         </div>
 
-        {/* Target warning messages definitions labels */}
         <h3 className="text-base font-black text-gray-900 mb-1">Delete Book Record?</h3>
         <p className="text-xs font-bold text-gray-400 mb-4">You are about to permanently delete:</p>
 
-        {/* Target Asset Identity Card display box banner matching mockup layout precisely */}
-        <div className="bg-red-50/50 border border-red-100 rounded-xl p-3.5 mb-4 text-left">
+        <div className="bg-red-50/50 border-2 border-red-100 rounded-xl p-3.5 mb-4 text-left">
           <h4 className="text-xs font-black text-red-900 mb-0.5">{book.title}</h4>
           <p className="text-[11px] font-bold text-red-600/80 leading-normal">
-            {book.author} <span className="mx-1.5 text-red-200">•</span> ISBN: {book.isbn || "N/A"} <span className="mx-1.5 text-red-200">•</span> {book.totalCopies || book.totalCopies === 0 ? book.totalCopies : "0"} copies
+            {book.author} <span className="mx-1.5 text-red-200">•</span> ISBN: {book.isbn || "N/A"} <span className="mx-1.5 text-red-200">•</span> {book.total_copies ?? 0} copies
           </p>
         </div>
 
-        {/* Action Warning Label Context Alert Block */}
-        <div className="bg-amber-50 border border-amber-100 rounded-xl p-3 flex items-start gap-2.5 mb-6 text-left">
+        <div className="bg-amber-50 border-2 border-amber-100 rounded-xl p-3 flex items-start gap-2.5 mb-6 text-left">
           <AlertTriangle size={15} className="text-amber-600 shrink-0 mt-0.5" />
           <p className="text-[11px] font-bold text-amber-700 leading-normal">
             This action cannot be undone. All borrow history will be lost.
           </p>
         </div>
 
-        {/* Binary choice control row panels panel */}
         <div className="grid grid-cols-2 gap-3 mt-auto">
-          <button
-            type="button"
-            onClick={onClose}
-            className="w-full py-2.5 rounded-xl border border-gray-200 bg-white text-xs font-black text-gray-500 hover:bg-gray-50 transition tracking-wide shadow-3xs"
-          >
+          <button type="button" onClick={onClose} className="w-full py-2.5 rounded-xl border-2 border-gray-300 bg-white text-xs font-black text-gray-500 hover:bg-gray-50 transition tracking-wide shadow-sm">
             Cancel
           </button>
           <button
             type="button"
             onClick={() => {
-              if (onConfirm) onConfirm(book.id);
+              if (onConfirm) onConfirm();
               onClose();
             }}
-            className="w-full py-2.5 rounded-xl bg-[#DF4A4A] hover:bg-red-700 text-xs font-black text-white transition tracking-wide shadow-xs"
+            className="w-full py-2.5 rounded-xl bg-[#DF4A4A] hover:bg-red-700 text-xs font-black text-white transition tracking-wide shadow-sm"
           >
             Yes, Delete Permanently
           </button>
         </div>
-
       </div>
     </div>
   );
 }
 
-
-const inputCls = "w-full border border-gray-300 rounded-md px-3 py-2 text-sm outline-none focus:border-[#055E83] transition text-gray-800 bg-white placeholder-gray-400";
-const labelCls = "block text-xs font-semibold text-gray-600 mb-1.5";
-
-
-export function AddBook() {
+// ADD BOOK 
+export function AddBook({ onCancel }) {
+  const [loading, setLoading] = useState(false);
+  const [showSuccess, setShowSuccess] = useState(false);
   const navigate = useNavigate();
+
+  const [sectionSuggestions, setSectionSuggestions] = useState([]);
+  const [coverFile, setCoverFile] = useState(null);
+  const [coverPreview, setCoverPreview] = useState(null);
+
+  useEffect(() => {
+    api.get("/books/options/sections")
+      .then((res) => { if (res.data?.success) setSectionSuggestions(res.data.data); })
+      .catch((err) => console.error("Failed to load section suggestions:", err));
+  }, []);
+
+  const handleClose = () => {
+    if (typeof onCancel === "function") {
+      onCancel();
+    } else {
+      navigate("/inventory");
+    }
+  };
+
   const [form, setForm] = useState({
-    deweyCode: "843.914",
-    sectionCode: "SEC-CHD",
-    borrowable: true,
-    title: "The Little Prince",
-    author: "Antoine de Saint-Exupéry",
-    isbn: "978-0-15-246227-0",
-    publisher: "Reynal & Hitchcock",
-    category: "Children",
-    totalCopies: "12",
-    year: "1943",
-    language: "French / Khmer",
-    description: "A young pilot stranded in the desert meets a little prince who has fallen to Earth from a tiny asteroid. A classic tale about love, loss, and the importance of seeing with the heart.",
+    deweyCode: "",
+    section: "",
+    isBorrowable: true,
+    title: "",
+    author: "",
+    isbn: "",
+    publisher: "",
+    totalCopies: "1",
+    publicationYear: new Date().getFullYear().toString(),
+    language: "English",
+    description: "",
   });
 
   const updateField = (field) => (e) => setForm({ ...form, [field]: e.target.value });
-  const toggleBorrowable = () => setForm((prev) => ({ ...prev, borrowable: !prev.borrowable }));
+  const toggleBorrowable = () => setForm((prev) => ({ ...prev, isBorrowable: !prev.isBorrowable }));
+
+  const previewCategory = categoryFromDeweyCode(form.deweyCode);
+
+  const handleCoverChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const allowed = ["image/jpeg", "image/png", "image/webp"];
+    if (!allowed.includes(file.type)) {
+      alert("Please choose a JPG, PNG, or WEBP image.");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      alert("Cover image must be under 5MB.");
+      return;
+    }
+    if (coverPreview) URL.revokeObjectURL(coverPreview);
+    setCoverFile(file);
+    setCoverPreview(URL.createObjectURL(file));
+  };
+
+  const removeCover = () => {
+    if (coverPreview) URL.revokeObjectURL(coverPreview);
+    setCoverFile(null);
+    setCoverPreview(null);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (coverPreview) URL.revokeObjectURL(coverPreview);
+    };
+  }, [coverPreview]);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      setLoading(true);
+
+      const formData = new FormData();
+      formData.append("title", form.title.trim());
+      formData.append("author", form.author.trim());
+      formData.append("deweyCode", form.deweyCode.trim());
+      formData.append("language", form.language);
+      if (form.section.trim()) formData.append("section", form.section.trim());
+      if (form.isbn.trim()) formData.append("isbn", form.isbn.trim());
+      if (form.publisher.trim()) formData.append("publisher", form.publisher.trim());
+      if (form.description.trim()) formData.append("description", form.description.trim());
+      if (form.publicationYear) formData.append("publicationYear", form.publicationYear);
+      formData.append("totalCopies", form.totalCopies || "1");
+      formData.append("isBorrowable", form.isBorrowable);
+      if (coverFile) formData.append("coverImage", coverFile);
+      // Category is intentionally NOT sent — the backend always derives it
+      // from deweyCode, so submitting one here would just be ignored.
+
+      await api.post("/books", formData);
+      setShowSuccess(true);
+    } catch (err) {
+      console.error("Submission failed details:", err);
+      const backendMessage = err.response?.data?.error || err.response?.data?.message;
+      alert(backendMessage || "Validation failed. Check your console log.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
-    <div className="flex h-screen overflow-hidden antialiased bg-[#F8FAFC]">
-      <Sidebar />
-      <main className="flex-1 overflow-y-auto bg-[#F8FAFC]">
-        <Navbar title="Inventory" breadcrumb="Inventory › Add New Book" onBack={() => navigate("/inventory")} />
+    <div className="w-full h-full bg-[#E9EEF4] p-6">
+      <form onSubmit={handleSubmit} className="bg-white rounded-xl overflow-hidden border-2 border-gray-300 max-w-7xl mx-auto" style={cardShadow}>
 
-        <div className="px-8 py-6">
-          <div className="bg-white rounded-lg overflow-hidden border border-gray-200 shadow-sm max-w-7xl mx-auto">
+        <div className="flex items-center justify-between px-6 py-4" style={{ backgroundColor: HEAD_COLOR }}>
+          <h2 className="text-white font-bold text-lg flex items-center gap-2">
+            <Library size={17} className="text-[#E8C110]" /> Add New Book
+          </h2>
+          <span className="text-white/80 text-xs">Fill in book details below</span>
+        </div>
 
-            {/* HEADER */}
-            <div className="flex items-center justify-between px-6 py-4 bg-[#055E83]">
-              <h2 className="text-white font-bold text-lg">Add New Book</h2>
-              <span className="text-white/80 text-xs">Fill in book details below</span>
+        <div className="p-6 space-y-6">
+          {/* Cover Image */}
+          <div className="flex gap-6 items-start">
+            <div className="w-28 h-36 bg-gray-50 border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center overflow-hidden shrink-0">
+              {coverPreview ? (
+                <img src={coverPreview} alt="Cover preview" className="w-full h-full object-cover" />
+              ) : (
+                <ImageIcon size={28} className="text-gray-300" />
+              )}
             </div>
-
-            <div className="p-6 space-y-6">
-
-              {/* COVER IMAGE CONTAINER */}
-              <div className="flex items-start gap-6">
-                <div className="flex flex-col items-center justify-center w-24 h-32 border-2 border-dashed border-gray-300 rounded-lg bg-gray-50 text-gray-400 shrink-0 select-none">
-                  <ImageIcon size={20} className="text-gray-400 mb-1" />
-                  <span className="text-[10px] font-medium text-center px-1">Upload Cover</span>
-                </div>
-                <div className="space-y-2">
-                  <h3 className="text-sm font-bold text-gray-800">Book Cover Image</h3>
-                  <p className="text-xs text-gray-500 leading-relaxed max-w-3xl">
-                    Upload a cover image for this book. Accepted formats: JPG, PNG, WEBP. Max size: 5MB. Recommended size: 300×400px.
-                  </p>
-                  <div className="flex items-center gap-3 pt-1">
-                    <button type="button" className="flex items-center gap-1.5 px-4 py-2 rounded-md text-xs font-semibold text-white bg-[#055E83] hover:opacity-95 transition">
-                      <Upload size={14} /> Choose File
-                    </button>
-                    <span className="text-xs text-gray-400">Or drag and drop your image here</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* CORE IDENTIFIERS ROW */}
-              <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
-                <div className="md:col-span-5">
-                  <label className={labelCls}>Dewey Code</label>
-                  <input value={form.deweyCode} onChange={updateField("deweyCode")} className={`${inputCls} font-bold text-[#055E83]`} />
-                </div>
-                <div className="md:col-span-4">
-                  <label className={labelCls}>Section Code</label>
-                  <input value={form.sectionCode} onChange={updateField("sectionCode")} className={inputCls} />
-                </div>
-                <div className="md:col-span-3">
-                  <label className={labelCls}>Borrowable</label>
-                  <div onClick={toggleBorrowable} className="w-28 h-[38px] bg-slate-100 border border-gray-200 rounded-md p-1 flex items-center cursor-pointer select-none">
-                    <div className={`h-full px-3 rounded flex items-center justify-center gap-1.5 text-xs font-bold transition-all shadow-xs ${
-                      form.borrowable ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700 ml-auto"
-                    }`}>
-                      <span className={`w-1.5 h-1.5 rounded-full ${form.borrowable ? "bg-green-600" : "bg-red-600"}`} />
-                      {form.borrowable ? "ON" : "OFF"}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* BOOK INFORMATION */}
-              <div className="space-y-4">
-                <h3 className="text-xs font-bold text-[#055E83] uppercase tracking-wider border-b border-gray-100 pb-1">Book Information</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className={labelCls}>Book Title</label>
-                    <input value={form.title} onChange={updateField("title")} className={inputCls} />
-                  </div>
-                  <div>
-                    <label className={labelCls}>Author</label>
-                    <input value={form.author} onChange={updateField("author")} className={inputCls} />
-                  </div>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className={labelCls}>ISBN (Optional)</label>
-                    <input value={form.isbn} onChange={updateField("isbn")} className={inputCls} />
-                  </div>
-                  <div>
-                    <label className={labelCls}>Publisher (Optional)</label>
-                    <input value={form.publisher} onChange={updateField("publisher")} className={inputCls} />
-                  </div>
-                </div>
-              </div>
-
-              {/* CLASSIFICATION & STOCK */}
-              <div className="space-y-4">
-                <h3 className="text-xs font-bold text-[#055E83] uppercase tracking-wider border-b border-gray-100 pb-1">Classification & Stock</h3>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <div>
-                    <label className={labelCls}>Category</label>
-                    <input value={form.category} onChange={updateField("category")} className={inputCls} />
-                  </div>
-                  <div>
-                    <label className={labelCls}>Total Copies</label>
-                    <input value={form.totalCopies} onChange={updateField("totalCopies")} className={inputCls} />
-                  </div>
-                  <div>
-                    <label className={labelCls}>Publication Year</label>
-                    <input value={form.year} onChange={updateField("year")} className={inputCls} />
-                  </div>
-                  <div>
-                    <label className={labelCls}>Language</label>
-                    <input value={form.language} onChange={updateField("language")} className={inputCls} />
-                  </div>
-                </div>
-                <div>
-                  <label className={labelCls}>Description</label>
-                  <textarea value={form.description} onChange={updateField("description")} rows={4} className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm outline-none focus:border-[#055E83] transition resize-none text-gray-800 bg-white" />
-                </div>
+            <div className="space-y-2 pt-1">
+              <h3 className="text-sm font-bold text-gray-800">Book Cover</h3>
+              <p className="text-[11px] text-gray-400 font-medium">JPG, PNG or WEBP · Max 5MB · Recommended 300×400px</p>
+              <div className="flex gap-2 pt-1">
+                <label className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold text-white hover:opacity-95 transition shadow-sm cursor-pointer" style={{ backgroundColor: HEAD_COLOR }}>
+                  <Upload size={14} /> {coverFile ? "Change Cover" : "Upload Cover"}
+                  <input type="file" accept="image/jpeg,image/png,image/webp" onChange={handleCoverChange} className="hidden" />
+                </label>
+                {coverFile && (
+                  <button type="button" onClick={removeCover} className="flex items-center gap-1.5 px-4 py-2 rounded-lg border-2 border-red-200 text-red-500 text-xs font-bold hover:bg-red-50 transition shadow-sm">
+                    <Trash2 size={14} /> Remove
+                  </button>
+                )}
               </div>
             </div>
+          </div>
 
-            {/* ACTION FOOTER */}
-            <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200 bg-gray-50/50">
-              <p className="text-xs text-gray-400">* All fields marked are required</p>
-              <div className="flex items-center gap-3">
-                <button type="button" onClick={() => navigate("/inventory")} className="px-5 py-2 border border-gray-300 text-gray-600 font-semibold rounded-md text-sm bg-white hover:bg-gray-50 transition">
-                  Cancel
-                </button>
-                <button type="button" className="px-5 py-2 rounded-md text-sm font-semibold transition bg-[#EAB308] text-slate-900 hover:opacity-95">
-                  Save as Draft
-                </button>
-                <button type="button" onClick={() => navigate("/inventory")} className="px-5 py-2 rounded-md text-sm font-semibold text-white bg-[#055E83] hover:opacity-95 transition">
-                  Add Book to Inventory
-                </button>
+          {/* Classification & Stock */}
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+            <div className="md:col-span-4">
+              <label className={labelCls}>Dewey Code *</label>
+              <input required value={form.deweyCode} onChange={updateField("deweyCode")} className={`${inputCls} font-bold`} style={{ color: HEAD_COLOR }} placeholder="e.g. 823.912" />
+            </div>
+            <div className="md:col-span-4">
+              <label className={labelCls}>Category (auto-generated)</label>
+              <input
+                value={previewCategory || "Enter a Dewey code to classify"}
+                readOnly
+                className={`${inputCls} bg-gray-50 ${previewCategory ? "text-gray-600" : "text-gray-400"} cursor-not-allowed`}
+              />
+            </div>
+            <div className="md:col-span-4">
+              <label className={labelCls}>Section</label>
+              <input
+                list="section-suggestions"
+                value={form.section}
+                onChange={updateField("section")}
+                placeholder="e.g. K1, Fiction-A..."
+                className={inputCls}
+                maxLength={20}
+              />
+              <datalist id="section-suggestions">
+                {sectionSuggestions.map((s) => <option key={s} value={s} />)}
+              </datalist>
+            </div>
+          </div>
+          <p className="text-[11px] text-gray-400 -mt-3">
+            Category follows the Dewey Decimal Classification's 10 main classes. Section is a free-text shelf label — start typing to see ones already in use.
+          </p>
+
+          <div className="flex items-center gap-3">
+            <label className={labelCls}>Borrowable</label>
+            <div onClick={toggleBorrowable} className="w-28 h-[42px] bg-slate-100 border-2 border-gray-300 rounded-lg p-1 flex items-center cursor-pointer select-none">
+              <div className={`h-full px-3 rounded-md flex items-center justify-center gap-1.5 text-xs font-bold transition-all shadow-sm ${form.isBorrowable ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700 ml-auto"}`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${form.isBorrowable ? "bg-green-600" : "bg-red-600"}`} />
+                {form.isBorrowable ? "ON" : "OFF"}
               </div>
             </div>
+          </div>
 
+          {/* Book Information */}
+          <div className="space-y-4">
+            <h3 className="text-xs font-bold uppercase tracking-wider border-b-2 border-gray-200 pb-1.5" style={{ color: HEAD_COLOR }}>Book Information</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className={labelCls}>Book Title *</label>
+                <input required value={form.title} onChange={updateField("title")} className={inputCls} />
+              </div>
+              <div>
+                <label className={labelCls}>Author *</label>
+                <input required value={form.author} onChange={updateField("author")} className={inputCls} />
+              </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className={labelCls}>ISBN (Optional)</label>
+                <input value={form.isbn} onChange={updateField("isbn")} className={inputCls} />
+              </div>
+              <div>
+                <label className={labelCls}>Publisher (Optional)</label>
+                <input value={form.publisher} onChange={updateField("publisher")} className={inputCls} />
+              </div>
+            </div>
+          </div>
+
+          {/* Stock Parameters */}
+          <div className="space-y-4">
+            <h3 className="text-xs font-bold uppercase tracking-wider border-b-2 border-gray-200 pb-1.5" style={{ color: HEAD_COLOR }}>Classification & Stock</h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label className={labelCls}>Total Copies *</label>
+                <input required type="number" min="1" value={form.totalCopies} onChange={updateField("totalCopies")} className={inputCls} />
+              </div>
+              <div>
+                <label className={labelCls}>Publication Year</label>
+                <input type="number" value={form.publicationYear} onChange={updateField("publicationYear")} className={inputCls} />
+              </div>
+              <div>
+                <label className={labelCls}>Language *</label>
+                <select required value={form.language} onChange={updateField("language")} className={inputCls}>
+                  {LANGUAGES.filter((l) => l !== "All Languages").map((lang) => <option key={lang} value={lang}>{lang}</option>)}
+                </select>
+              </div>
+            </div>
+            <div>
+              <label className={labelCls}>Description</label>
+              <textarea value={form.description} onChange={updateField("description")} rows={4} className={`${inputCls} resize-none leading-relaxed`} />
+            </div>
           </div>
         </div>
-      </main>
+
+        {/* Footer Actions */}
+        <div className="flex items-center justify-between px-6 py-4 border-t-2 border-gray-300 bg-gray-50/50">
+          <p className="text-xs text-gray-400 font-bold">* All fields marked are required</p>
+          <div className="flex items-center gap-3">
+            <button type="button" onClick={handleClose} className="px-5 py-2.5 border-2 border-gray-300 text-gray-600 font-bold rounded-lg text-xs bg-white hover:bg-gray-50 transition shadow-sm">
+              Cancel
+            </button>
+            <button type="submit" disabled={loading} className="px-5 py-2.5 rounded-lg text-xs font-bold text-white hover:opacity-95 transition shadow-sm" style={{ backgroundColor: HEAD_COLOR }}>
+              {loading ? "Adding Asset..." : "Add Book to Inventory"}
+            </button>
+          </div>
+        </div>
+      </form>
+
+      <SuccessModal
+        isOpen={showSuccess}
+        onClose={() => {
+          setShowSuccess(false);
+          handleClose();
+        }}
+        title="Book Added Successfully"
+        message={`"${form.title}" has been added to the library inventory.`}
+      />
     </div>
   );
 }
 
-
-const BOOKS = [
-  { id: "001", deweyCode: "843.914", sectionCode: "SEC-CHD", title: "The Little Prince", author: "Antoine de Saint-Exupéry", isbn: "978-0-15-246227-0", publisher: "Reynal & Hitchcock, New York", category: "Children / Classic Fiction", totalCopies: 12, available: 8, borrowed: 4, language: "French / Khmer Translation", year: 1943, description: "A young pilot stranded in the Sahara Desert encounters a small boy — The Little Prince — who has fallen to Earth from a tiny asteroid. A timeless tale of friendship, love, and human nature.", status: "AVAILABLE", borrowable: true, addedDate: "January 15, 2024", history: [{ name: "Sophea Mao", borrowed: "Mar 1, 2026", returned: "Mar 14, 2026" }, { name: "Vireak Chan", borrowed: "Feb 10, 2026", returned: "Feb 24, 2026" }, { name: "Lina Phal", borrowed: "Jan 22, 2026", returned: "Feb 5, 2026" }] },
-  { id: "002", deweyCode: "959.6", sectionCode: "SEC-HIS", title: "Khmer History Vol.1", author: "Chheng Phon", isbn: "978-99950-60-1-2", publisher: "National Library", category: "History", totalCopies: 5, available: 0, borrowed: 5, language: "Khmer", year: 2010, description: "A comprehensive account of Khmer history.", status: "BORROWED", borrowable: true, addedDate: "February 3, 2024", history: [] },
-];
-
-const statusStyle = {
-  "AVAILABLE":    { bg: "#E8F5E9", text: "#2E7D32" },
-  "BORROWED":     { bg: "#FFFDE7", text: "#B78103" },
-  "LOW STOCK":    { bg: "#FFF3E0", text: "#E65100" },
-  "OUT OF STOCK": { bg: "#FFEBEE", text: "#C62828" },
-};
-
 export function BookDetails() {
   const navigate = useNavigate();
   const { id } = useParams();
-  const book = BOOKS.find((b) => b.id === id) || BOOKS[0];
-  const availPct = Math.round((book.available / book.totalCopies) * 100);
-
+  const [book, setBook] = useState(null);
+  const [history, setHistory] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
 
-  const handleDeleteConfirmExecution = (bookId) => {
-    console.log("Completely dropping database asset row item index reference code:", bookId);
-    navigate("/inventory");
+  useEffect(() => {
+    fetchBook();
+    fetchHistory();
+  }, [id]);
+
+  const fetchBook = async () => {
+    try {
+      setLoading(true);
+      const response = await api.get(`/books/${id}`);
+      if (response.data?.success) setBook(response.data.data);
+    } catch (err) {
+      console.error("Failed to load book details:", err);
+    } finally {
+      setLoading(false);
+    }
   };
 
+  const fetchHistory = async () => {
+    try {
+      const response = await api.get(`/books/${id}/history?limit=3`);
+      if (response.data?.success) setHistory(response.data.data);
+    } catch (err) {
+      console.error("Failed to load book borrow history:", err);
+    }
+  };
+
+  const handleDeleteConfirm = async () => {
+    try {
+      await api.delete(`/books/${id}`);
+      navigate("/inventory");
+    } catch (err) {
+      console.error("Failed to delete book:", err);
+      const backendMessage = err.response?.data?.error || err.response?.data?.message;
+      alert(backendMessage || "Failed to delete book. It may have existing borrow history.");
+    } finally {
+      setIsDeleteOpen(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <main className="flex-1 select-none bg-[#E9EEF4]">
+        <Navbar title="Inventory" breadcrumb="Inventory › Book Details" onBack={() => navigate("/inventory")} />
+        <div className="p-10 text-center text-gray-500 font-medium">Loading book details...</div>
+      </main>
+    );
+  }
+
+  if (!book) {
+    return (
+      <main className="flex-1 select-none bg-[#E9EEF4]">
+        <Navbar title="Inventory" breadcrumb="Inventory › Book Details" onBack={() => navigate("/inventory")} />
+        <div className="p-10 text-center text-gray-400">Book not found.</div>
+      </main>
+    );
+  }
+
+  const availPct = book.total_copies ? Math.round((book.available_copies / book.total_copies) * 100) : 0;
+
   return (
-    <div className="flex h-screen overflow-hidden antialiased select-none bg-[#F8FAFC]">
-      <Sidebar />
-      <main className="flex-1 overflow-y-auto overflow-x-hidden">
+    <>
+      <main className="flex-1 select-none bg-[#E9EEF4]">
         <Navbar title="Inventory" breadcrumb="Inventory › Book Details" onBack={() => navigate("/inventory")} />
 
-        <div className="px-8 py-6 space-y-5">
-          {/* Top Sub-Header Breadcrumb Action Navigation Bar */}
+        <div className="px-6 py-5 space-y-4">
           <div className="flex items-center justify-between">
-            <button onClick={() => navigate("/inventory")} className="flex items-center gap-2 text-sm font-semibold text-gray-500 hover:text-gray-700 transition">
+            <button onClick={() => navigate("/inventory")} className="flex items-center gap-2 text-sm font-bold text-gray-500 hover:text-gray-700 transition">
               <span className="text-gray-400">Inventory</span>
               <ChevronRight size={14} className="text-gray-400" />
               <span className="text-gray-700 font-bold">Book Details</span>
             </button>
 
-            {/* Top Action Header Controls Buttons grouped neatly */}
             <div className="flex items-center gap-2">
               <button
-                onClick={() => navigate(`/inventory/${book.id}/edit`)}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold text-white bg-[#055E83] hover:opacity-95 transition shadow-3xs"
+                onClick={() => navigate(`/inventory/${book.book_id}/edit`)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-bold text-white hover:opacity-85 transition shadow-sm"
+                style={{ backgroundColor: HEAD_COLOR }}
               >
-                <Edit2 size={13} /> Edit Book
+                <Edit2 size={12} /> Edit Book
               </button>
               <button
                 type="button"
                 onClick={() => setIsDeleteOpen(true)}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold text-white bg-[#DF4A4A] hover:bg-red-700 transition shadow-3xs"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-bold hover:opacity-85 transition shadow-sm bg-red-50 text-red-500 border-2 border-red-100"
               >
-                <Trash2 size={13} /> Delete Book
+                <Trash2 size={12} /> Delete Book
               </button>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-[1fr_290px] gap-6 items-start">
+          <div className="grid grid-cols-1 lg:grid-cols-[1fr_290px] gap-5 items-start">
 
-            {/* Left Main Card: Structural Data Fields specifications matrix */}
-            <div className="bg-white rounded-xl shadow-xs border border-gray-100 overflow-hidden">
-              <div className="flex items-center justify-between px-6 py-4 bg-[#055E83]">
-                <h2 className="text-white font-bold text-sm">Book Details</h2>
-                <span className="text-[11px] font-black px-2.5 py-0.5 rounded-md shadow-3xs" style={{ backgroundColor: statusStyle[book.status.toUpperCase()]?.bg, color: statusStyle[book.status.toUpperCase()]?.text }}>
-                  {book.status}
-                </span>
+            <div className="bg-white rounded-xl border-2 border-gray-300 overflow-hidden" style={cardShadow}>
+              <div className="flex items-center justify-between px-6 py-4" style={{ backgroundColor: HEAD_COLOR }}>
+                <h2 className="text-white font-bold text-sm flex items-center gap-2"><Library size={14} className="text-[#E8C110]" /> Book Details</h2>
+                <StatusBadge status={book.status} />
               </div>
 
               <div className="p-6">
                 <h1 className="text-2xl font-black text-gray-900 tracking-tight mb-1">{book.title}</h1>
                 <p className="text-xs font-bold text-gray-400 mb-6">{book.author}</p>
 
-                <div className="space-y-4 mb-6 border-b border-gray-100 pb-6">
+                <div className="space-y-4 mb-6 border-b-2 border-gray-200 pb-6">
                   <div className="grid grid-cols-[180px_1fr] gap-2 items-center">
-                    <span className="text-xs font-bold text-gray-400">Dewey Code</span>
-                    <span className="text-xs font-mono font-bold text-[#055E83]">{book.deweyCode}</span>
+                    <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Dewey Code</span>
+                    <span className="text-xs font-mono font-bold" style={{ color: HEAD_COLOR }}>{book.dewey_code}</span>
                   </div>
 
                   <div className="grid grid-cols-[180px_1fr] gap-2 items-center">
-                    <span className="text-xs font-bold text-gray-400">Section Code</span>
-                    <span className="text-xs font-mono font-bold text-gray-600">{book.sectionCode}</span>
+                    <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Section</span>
+                    <span className="text-xs font-mono font-bold text-gray-600">{book.section || "N/A"}</span>
                   </div>
 
                   <div className="grid grid-cols-[180px_1fr] gap-2 items-center">
-                    <span className="text-xs font-bold text-gray-400">Borrowable</span>
-                    <div className="flex items-center">
-                      <div className="px-2.5 py-0.5 bg-[#E8F5E9] text-[#2E7D32] rounded-md flex items-center justify-center gap-1.5 text-[10px] font-black tracking-wide shadow-3xs">
-                        <span className="w-1.5 h-1.5 rounded-full bg-[#2E7D32]" />
-                        ON
-                      </div>
-                    </div>
+                    <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Borrowable</span>
+                    <BorrowableBadge on={book.is_borrowable} />
                   </div>
 
                   {[
-                    ["Publisher (Optional)", book.publisher, null],
-                    ["Publication Year", String(book.year), null],
+                    ["ISBN", book.isbn || "N/A", null],
+                    ["Publisher", book.publisher || "N/A", null],
+                    ["Publication Year", book.publication_year ? String(book.publication_year) : "N/A", null],
                     ["Category", book.category, null],
                     ["Language", book.language, null],
-                    ["Total Copies", `${book.totalCopies} copies`, null],
-                    ["Available", `${book.available} copies`, "#16A34A"],
-                    ["Currently Borrowed", `${book.borrowed} copies`, "#EA580C"],
-                    ["Added to Library", book.addedDate, null],
+                    ["Total Copies", `${book.total_copies} copies`, null],
+                    ["Available", `${book.available_copies} copies`, "#16A34A"],
+                    ["Currently Borrowed", `${book.borrowed_copies} copies`, "#EA580C"],
+                    ["Added to Library", book.added_at ? new Date(book.added_at).toLocaleDateString() : "N/A", null],
                   ].map(([label, val, color]) => (
                     <div key={label} className="grid grid-cols-[180px_1fr] gap-2 items-baseline">
-                      <span className="text-xs font-bold text-gray-400">{label}</span>
+                      <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">{label}</span>
                       <span className="text-xs font-semibold" style={{ color: color || "#475569" }}>{val}</span>
                     </div>
                   ))}
@@ -355,18 +819,21 @@ export function BookDetails() {
 
                 <div className="mb-6">
                   <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2.5">Description</h3>
-                  <p className="text-xs text-gray-500 leading-relaxed max-w-3xl font-medium">{book.description}</p>
+                  <div className="bg-gray-50 rounded-lg px-4 py-3 text-xs text-gray-600 leading-relaxed border-2 border-gray-200 font-medium max-w-3xl">
+                    {book.description || "No description available."}
+                  </div>
                 </div>
 
-                {book.history.length > 0 && (
+                {history.length > 0 && (
                   <div>
                     <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Borrow History (Last 3)</h3>
                     <div className="space-y-2.5">
-                      {book.history.map((h, i) => (
-                        <p key={i} className="text-xs text-gray-500 font-medium">
-                          <span className="font-bold text-gray-700">{h.name}</span>
-                          <span className="text-gray-300 mx-2">·</span> Borrowed {h.borrowed}
-                          <span className="text-gray-300 mx-2">·</span> Returned {h.returned}
+                      {history.map((h) => (
+                        <p key={h.borrow_id} className="text-xs text-gray-500 font-medium">
+                          <span className="font-bold text-gray-700">{h.member_name}</span>
+                          <span className="text-gray-300 mx-2">·</span> Borrowed {new Date(h.borrow_date).toLocaleDateString()}
+                          <span className="text-gray-300 mx-2">·</span>{" "}
+                          {h.return_date ? `Returned ${new Date(h.return_date).toLocaleDateString()}` : `Due ${new Date(h.due_date).toLocaleDateString()}`}
                         </p>
                       ))}
                     </div>
@@ -375,57 +842,28 @@ export function BookDetails() {
               </div>
             </div>
 
-            {/* Right Pane: Cover profile display thumbnails & copy loops */}
-            <div className="flex flex-col gap-5">
-              <div className="bg-white rounded-xl shadow-xs border border-gray-100 overflow-hidden">
-                <div className="px-5 py-4 bg-[#055E83]">
-                  <h3 className="text-white font-bold text-sm">Stock Overview</h3>
+            <div className="flex flex-col gap-4">
+              <div className="bg-white rounded-xl border-2 border-gray-300 overflow-hidden" style={cardShadow}>
+                <div className="px-5 py-4" style={{ backgroundColor: HEAD_COLOR }}>
+                  <h3 className="text-white font-bold text-sm flex items-center gap-2"><ImageIcon size={14} className="text-[#E8C110]" /> Stock Overview</h3>
                 </div>
                 <div className="p-5">
-                  <p className="text-xs font-bold text-gray-500 mb-2">Book Cover</p>
-
-                  <div className="w-full h-56 bg-gray-50 border border-gray-100 rounded-xl flex items-center justify-center p-4 mb-2 overflow-hidden shadow-3xs">
-                    <img
-                      src="/little-prince-cover.jpg"
-                      alt="The Little Prince Cover"
-                      className="h-full object-contain shadow-xs rounded-md"
-                      onError={(e) => { e.target.style.display = 'none'; }}
-                    />
+                  <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Book Cover</p>
+                  <div className="w-full h-56 bg-gray-50 border-2 border-gray-200 rounded-xl flex items-center justify-center p-4 mb-5 overflow-hidden">
+                    {book.cover_image_url ? (
+                      <img src={`${ASSET_BASE_URL}${book.cover_image_url}`} alt={`${book.title} cover`} className="h-full object-contain rounded-md" />
+                    ) : (
+                      <ImageIcon size={32} className="text-gray-300" />
+                    )}
                   </div>
-                  <p className="text-[10px] font-mono font-bold text-gray-400 mb-5 text-center">little-prince-cover.jpg · 2.1 MB</p>
 
-                  <div className="bg-[#F4F9FC] rounded-xl p-4 mb-5 border border-[#E1EEF4]">
-                    <p className="text-xs font-bold mb-0.5 text-[#055E83]">Copy Availability</p>
-                    <p className="text-xs text-gray-500 font-semibold mb-2.5">{book.available} of {book.totalCopies} available</p>
+                  <div className="rounded-xl p-4 border-2" style={{ backgroundColor: "#F4F9FC", borderColor: "#E1EEF4" }}>
+                    <p className="text-xs font-bold mb-0.5" style={{ color: HEAD_COLOR }}>Copy Availability</p>
+                    <p className="text-xs text-gray-500 font-semibold mb-2.5">{book.available_copies} of {book.total_copies} available</p>
                     <div className="w-full h-2 bg-slate-200/60 rounded-full overflow-hidden">
                       <div className="h-2 rounded-full bg-[#16A34A] transition-all duration-300" style={{ width: `${availPct}%` }} />
                     </div>
                   </div>
-
-                  <p className="text-xs font-bold text-gray-500 mb-2.5">Quick Actions</p>
-                  <div className="space-y-1.5">
-                    {["Borrow This Book", "Reserve for Member", "Print Book Label", "View All Borrows"].map((action) => (
-                      <button key={action} className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg border border-gray-100 text-xs font-bold text-gray-600 hover:bg-gray-50/80 transition text-left shadow-3xs">
-                        {action} <ChevronRight size={13} className="text-gray-400" />
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              {/* Feed activity card panel bottom */}
-              <div className="bg-white rounded-xl p-5 shadow-xs border border-gray-100">
-                <p className="text-xs font-bold text-gray-500 mb-3.5">Recent Activity</p>
-                <div className="space-y-3">
-                  <p className="text-[11px] text-gray-500 font-medium leading-normal">
-                    Borrowed by <span className="font-bold text-gray-700">Sophea Mao</span> — Mar 1, 2026
-                  </p>
-                  <p className="text-[11px] text-gray-500 font-medium leading-normal">
-                    Returned by <span className="font-bold text-gray-700">Vireak Chan</span> — Feb 24, 2026
-                  </p>
-                  <p className="text-[11px] text-gray-500 font-medium leading-normal">
-                    New copy added — Jan 15, 2026
-                  </p>
                 </div>
               </div>
             </div>
@@ -437,121 +875,265 @@ export function BookDetails() {
       <DeleteBookModal
         isOpen={isDeleteOpen}
         onClose={() => setIsDeleteOpen(false)}
-        onConfirm={handleDeleteConfirmExecution}
+        onConfirm={handleDeleteConfirm}
         book={book}
       />
-    </div>
+    </>
   );
 }
 
+// ─── EDIT BOOK ────────────────────────────────────────────────────────────────
 export function EditBook() {
   const navigate = useNavigate();
   const { id } = useParams();
 
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [notFound, setNotFound] = useState(false);
+
+  const [sectionSuggestions, setSectionSuggestions] = useState([]);
+  const [coverFile, setCoverFile] = useState(null);
+  const [coverPreview, setCoverPreview] = useState(null);
+  const [existingCoverUrl, setExistingCoverUrl] = useState(null);
+  const [removeCoverFlag, setRemoveCoverFlag] = useState(false);
+
   const [form, setForm] = useState({
-    deweyCode: "843.914",
-    sectionCode: "SEC-CHD",
-    borrowable: true,
-    title: "The Little Prince (Revised Edition)",
-    author: "Antoine de Saint-Exupéry",
-    isbn: "978-0-15-246227-0",
-    publisher: "Reynal & Hitchcock",
-    category: "Children",
-    totalCopies: "14",
-    year: "1943",
-    language: "French / Khmer",
-    description:
-      "A young pilot stranded in the Sahara Desert encounters a small boy — The Little Prince — who has fallen to Earth from a tiny asteroid. A timeless tale of friendship, love, and human nature. (Revised Khmer edition 2024)",
+    deweyCode: "",
+    section: "",
+    isBorrowable: true,
+    title: "",
+    author: "",
+    isbn: "",
+    publisher: "",
+    totalCopies: "1",
+    publicationYear: "",
+    language: "English",
+    description: "",
   });
 
+  useEffect(() => {
+    fetchBook();
+    api.get("/books/options/sections")
+      .then((res) => { if (res.data?.success) setSectionSuggestions(res.data.data); })
+      .catch((err) => console.error("Failed to load section suggestions:", err));
+  }, [id]);
+
+  useEffect(() => {
+    return () => {
+      if (coverPreview) URL.revokeObjectURL(coverPreview);
+    };
+  }, [coverPreview]);
+
+  const fetchBook = async () => {
+    try {
+      setLoading(true);
+      const response = await api.get(`/books/${id}`);
+      if (response.data?.success) {
+        const b = response.data.data;
+        setForm({
+          deweyCode: b.dewey_code || "",
+          section: b.section || "",
+          isBorrowable: !!b.is_borrowable,
+          title: b.title || "",
+          author: b.author || "",
+          isbn: b.isbn || "",
+          publisher: b.publisher || "",
+          totalCopies: String(b.total_copies ?? 1),
+          publicationYear: b.publication_year ? String(b.publication_year) : "",
+          language: b.language || "English",
+          description: b.description || "",
+        });
+        setExistingCoverUrl(b.cover_image_url ? `${ASSET_BASE_URL}${b.cover_image_url}` : null);
+      } else {
+        setNotFound(true);
+      }
+    } catch (err) {
+      console.error("Failed to load book for editing:", err);
+      setNotFound(true);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const updateField = (field) => (e) => setForm({ ...form, [field]: e.target.value });
-  const toggleBorrowable = () => setForm((prev) => ({ ...prev, borrowable: !prev.borrowable }));
+  const toggleBorrowable = () => setForm((prev) => ({ ...prev, isBorrowable: !prev.isBorrowable }));
+
+  const previewCategory = categoryFromDeweyCode(form.deweyCode);
+
+  const handleCoverChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const allowed = ["image/jpeg", "image/png", "image/webp"];
+    if (!allowed.includes(file.type)) {
+      alert("Please choose a JPG, PNG, or WEBP image.");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      alert("Cover image must be under 5MB.");
+      return;
+    }
+    if (coverPreview) URL.revokeObjectURL(coverPreview);
+    setCoverFile(file);
+    setCoverPreview(URL.createObjectURL(file));
+    setRemoveCoverFlag(false);
+  };
+
+  const handleRemoveCover = () => {
+    if (coverPreview) URL.revokeObjectURL(coverPreview);
+    setCoverFile(null);
+    setCoverPreview(null);
+    setExistingCoverUrl(null);
+    setRemoveCoverFlag(true);
+  };
+
+  const handleSave = async () => {
+    try {
+      setSaving(true);
+      const formData = new FormData();
+      formData.append("title", form.title.trim());
+      formData.append("author", form.author.trim());
+      formData.append("deweyCode", form.deweyCode.trim());
+      formData.append("language", form.language);
+      formData.append("section", form.section.trim());
+      formData.append("isbn", form.isbn.trim());
+      formData.append("publisher", form.publisher.trim());
+      formData.append("description", form.description.trim());
+      if (form.publicationYear) formData.append("publicationYear", form.publicationYear);
+      if (form.totalCopies) formData.append("totalCopies", form.totalCopies);
+      formData.append("isBorrowable", form.isBorrowable);
+      if (coverFile) {
+        formData.append("coverImage", coverFile);
+      } else if (removeCoverFlag) {
+        formData.append("removeCover", "true");
+      }
+      // Category is intentionally NOT sent — the backend re-derives it from
+      // deweyCode whenever deweyCode is included in the update.
+
+      await api.put(`/books/${id}`, formData);
+      alert("Book updated successfully!");
+      navigate(`/inventory/${id}`);
+    } catch (err) {
+      console.error("Failed to update book:", err);
+      const backendMessage = err.response?.data?.error || err.response?.data?.message;
+      alert(backendMessage || "Failed to update book. Check your console log.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <main className="flex-1 bg-[#E9EEF4]">
+        <Navbar title="Inventory" breadcrumb="Inventory › Edit Book" onBack={() => navigate("/inventory")} />
+        <div className="p-10 text-center text-gray-500 font-medium">Loading book...</div>
+      </main>
+    );
+  }
+
+  if (notFound) {
+    return (
+      <main className="flex-1 bg-[#E9EEF4]">
+        <Navbar title="Inventory" breadcrumb="Inventory › Edit Book" onBack={() => navigate("/inventory")} />
+        <div className="p-10 text-center text-gray-400">Book not found.</div>
+      </main>
+    );
+  }
+
+  const displayCover = coverPreview || existingCoverUrl;
 
   return (
-    <div className="flex h-screen overflow-hidden antialiased bg-[#F8FAFC]">
-      <Sidebar />
+    <main className="flex-1 bg-[#E9EEF4]">
+      <Navbar title="Inventory" breadcrumb="Inventory › Book Details › Edit Book" onBack={() => navigate(`/inventory/${id}`)} />
 
-      <main className="flex-1 overflow-y-auto bg-[#F8FAFC]">
-        <Navbar title="Inventory" breadcrumb="Inventory › Book Details › Edit Book" onBack={() => navigate(`/inventory/${id}`)} />
+        <div className="px-6 py-5">
+          <div className="bg-white rounded-xl overflow-hidden border-2 border-gray-300 max-w-7xl mx-auto" style={cardShadow}>
 
-        <div className="px-8 py-6">
-          <div className="bg-white rounded-lg overflow-hidden border border-gray-200 shadow-sm max-w-7xl mx-auto">
-
-            {/* HEADER */}
-            <div className="flex items-center justify-between px-6 py-4 bg-[#055E83]">
-              <h2 className="text-white font-bold text-lg">Edit Book</h2>
-              <span className="text-white/80 text-xs">The Little Prince • ID: BK-001</span>
-            </div>
-
-            {/* UNSAVED WARNING BANNER */}
-            <div className="px-6 pt-4">
-              <div className="flex items-center gap-2 rounded border border-amber-200 bg-amber-50 px-4 py-2">
-                <AlertTriangle size={14} className="text-amber-600 shrink-0" />
-                <p className="text-xs font-semibold text-amber-800">
-                  You have unsaved changes. Review and save before leaving.
-                </p>
-              </div>
+            <div className="flex items-center justify-between px-6 py-4" style={{ backgroundColor: HEAD_COLOR }}>
+              <h2 className="text-white font-bold text-lg flex items-center gap-2"><Edit2 size={16} className="text-[#E8C110]" /> Edit Book</h2>
+              <span className="text-white/80 text-xs">{form.title} • ID: {id}</span>
             </div>
 
             <div className="p-6 space-y-6">
 
-              {/* COVER IMAGE CONTAINER */}
               <div className="flex gap-6 items-start">
-                <img src="/little-prince-cover.jpg" alt="Cover" className="w-24 h-32 rounded-lg border border-gray-200 object-cover bg-gray-50 shrink-0" onError={(e) => { e.target.style.display='none'; }} />
+                <div className="w-24 h-32 rounded-lg border-2 border-gray-300 bg-gray-50 shrink-0 overflow-hidden flex items-center justify-center">
+                  {displayCover ? (
+                    <img src={displayCover} alt="Cover" className="w-full h-full object-cover" />
+                  ) : (
+                    <ImageIcon size={24} className="text-gray-300" />
+                  )}
+                </div>
                 <div className="space-y-2">
                   <h3 className="text-sm font-bold text-gray-800">Book Cover Image</h3>
-                  <p className="text-xs text-gray-500">
-                    Current: little-prince-cover.jpg · 2.1 MB · Uploaded Jan 15, 2024
-                  </p>
                   <div className="flex gap-2 pt-1">
-                    <button type="button" className="flex items-center gap-1.5 px-4 py-2 rounded-md text-xs font-semibold text-white bg-[#055E83] hover:opacity-95 transition">
+                    <label className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold text-white hover:opacity-95 transition shadow-sm cursor-pointer" style={{ backgroundColor: HEAD_COLOR }}>
                       <Upload size={14} /> Change Cover
-                    </button>
-                    <button type="button" className="flex items-center gap-1.5 px-4 py-2 rounded-md border border-red-200 text-red-500 text-xs font-semibold hover:bg-red-50 transition">
-                      <Trash2 size={14} /> Remove
-                    </button>
+                      <input type="file" accept="image/jpeg,image/png,image/webp" onChange={handleCoverChange} className="hidden" />
+                    </label>
+                    {displayCover && (
+                      <button type="button" onClick={handleRemoveCover} className="flex items-center gap-1.5 px-4 py-2 rounded-lg border-2 border-red-200 text-red-500 text-xs font-bold hover:bg-red-50 transition shadow-sm">
+                        <Trash2 size={14} /> Remove
+                      </button>
+                    )}
                   </div>
-                  <p className="text-[11px] text-gray-400 mt-1">
-                    JPG, PNG or WEBP · Max 5MB · Recommended 300×400px
-                  </p>
+                  <p className="text-[11px] text-gray-400 font-medium mt-1">JPG, PNG or WEBP · Max 5MB · Recommended 300×400px</p>
                 </div>
               </div>
 
-              {/* CORE IDENTIFIERS ROW */}
               <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
-                <div className="md:col-span-5">
-                  <label className={labelCls}>Dewey Code</label>
-                  {/* Distinct light blue field background for edit focus context */}
-                  <input value={form.deweyCode} onChange={updateField("deweyCode")} className={`${inputCls} font-bold text-[#055E83] bg-[#F0F7FA] border-[#BCE0FD]`} />
+                <div className="md:col-span-4">
+                  <label className={labelCls}>Dewey Code *</label>
+                  <input required value={form.deweyCode} onChange={updateField("deweyCode")} className={`${inputCls} font-bold`} style={{ color: HEAD_COLOR }} />
                 </div>
                 <div className="md:col-span-4">
-                  <label className={labelCls}>Section Code</label>
-                  <input value={form.sectionCode} onChange={updateField("sectionCode")} className={inputCls} />
+                  <label className={labelCls}>Category (auto-generated)</label>
+                  <input
+                    value={previewCategory || "Enter a Dewey code to classify"}
+                    readOnly
+                    className={`${inputCls} bg-gray-50 ${previewCategory ? "text-gray-600" : "text-gray-400"} cursor-not-allowed`}
+                  />
                 </div>
-                <div className="md:col-span-3">
-                  <label className={labelCls}>Borrowable</label>
-                  <div onClick={toggleBorrowable} className="w-28 h-[38px] bg-slate-100 border border-gray-200 rounded-md p-1 flex items-center cursor-pointer select-none">
-                    <div className={`h-full px-3 rounded flex items-center justify-center gap-1.5 text-xs font-bold transition-all shadow-xs ${
-                      form.borrowable ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700 ml-auto"
-                    }`}>
-                      <span className={`w-1.5 h-1.5 rounded-full ${form.borrowable ? "bg-green-600" : "bg-red-600"}`} />
-                      {form.borrowable ? "ON" : "OFF"}
-                    </div>
+                <div className="md:col-span-4">
+                  <label className={labelCls}>Section</label>
+                  <input
+                    list="section-suggestions-edit"
+                    value={form.section}
+                    onChange={updateField("section")}
+                    placeholder="e.g. K1, Fiction-A..."
+                    className={inputCls}
+                    maxLength={20}
+                  />
+                  <datalist id="section-suggestions-edit">
+                    {sectionSuggestions.map((s) => <option key={s} value={s} />)}
+                  </datalist>
+                </div>
+              </div>
+              <p className="text-[11px] text-gray-400 -mt-3">
+                Category follows the Dewey Decimal Classification's 10 main classes and updates automatically if you change the Dewey code.
+              </p>
+
+              <div className="flex items-center gap-3">
+                <label className={labelCls}>Borrowable</label>
+                <div onClick={toggleBorrowable} className="w-28 h-[42px] bg-slate-100 border-2 border-gray-300 rounded-lg p-1 flex items-center cursor-pointer select-none">
+                  <div className={`h-full px-3 rounded-md flex items-center justify-center gap-1.5 text-xs font-bold transition-all shadow-sm ${
+                    form.isBorrowable ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700 ml-auto"
+                  }`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${form.isBorrowable ? "bg-green-600" : "bg-red-600"}`} />
+                    {form.isBorrowable ? "ON" : "OFF"}
                   </div>
                 </div>
               </div>
 
-              {/* BOOK INFORMATION */}
               <div className="space-y-4">
-                <h3 className="text-xs font-bold text-[#055E83] uppercase tracking-wider border-b border-gray-100 pb-1">Book Information</h3>
+                <h3 className="text-xs font-bold uppercase tracking-wider border-b-2 border-gray-200 pb-1.5" style={{ color: HEAD_COLOR }}>Book Information</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className={labelCls}>Book Title</label>
-                    <input value={form.title} onChange={updateField("title")} className={inputCls} />
+                    <label className={labelCls}>Book Title *</label>
+                    <input required value={form.title} onChange={updateField("title")} className={inputCls} />
                   </div>
                   <div>
-                    <label className={labelCls}>Author</label>
-                    <input value={form.author} onChange={updateField("author")} className={inputCls} />
+                    <label className={labelCls}>Author *</label>
+                    <input required value={form.author} onChange={updateField("author")} className={inputCls} />
                   </div>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -566,330 +1148,47 @@ export function EditBook() {
                 </div>
               </div>
 
-              {/* CLASSIFICATION & STOCK */}
               <div className="space-y-4">
-                <h3 className="text-xs font-bold text-[#055E83] uppercase tracking-wider border-b border-gray-100 pb-1">Classification & Stock</h3>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <h3 className="text-xs font-bold uppercase tracking-wider border-b-2 border-gray-200 pb-1.5" style={{ color: HEAD_COLOR }}>Stock</h3>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                   <div>
-                    <label className={labelCls}>Category</label>
-                    <input value={form.category} onChange={updateField("category")} className={inputCls} />
-                  </div>
-                  <div>
-                    <label className={labelCls}>Total Copies</label>
-                    <input value={form.totalCopies} onChange={updateField("totalCopies")} className={inputCls} />
+                    <label className={labelCls}>Total Copies *</label>
+                    <input required type="number" min="0" value={form.totalCopies} onChange={updateField("totalCopies")} className={inputCls} />
                   </div>
                   <div>
                     <label className={labelCls}>Publication Year</label>
-                    <input value={form.year} onChange={updateField("year")} className={inputCls} />
+                    <input type="number" value={form.publicationYear} onChange={updateField("publicationYear")} className={inputCls} />
                   </div>
                   <div>
-                    <label className={labelCls}>Language</label>
-                    <input value={form.language} onChange={updateField("language")} className={inputCls} />
+                    <label className={labelCls}>Language *</label>
+                    <select required value={form.language} onChange={updateField("language")} className={inputCls}>
+                      {LANGUAGES.filter((l) => l !== "All Languages").map((lang) => <option key={lang} value={lang}>{lang}</option>)}
+                    </select>
                   </div>
                 </div>
                 <div>
                   <label className={labelCls}>Description</label>
-                  <textarea value={form.description} onChange={updateField("description")} rows={4} className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm outline-none focus:border-[#055E83] transition resize-none text-gray-800 bg-white" />
-                </div>
-              </div>
-
-              {/* EDIT HISTORY PANEL */}
-              <div className="border border-gray-200 rounded-lg overflow-hidden bg-white">
-                <div className="bg-gray-50 px-4 py-2 font-bold text-gray-700 text-xs border-b border-gray-200">
-                  Edit History
-                </div>
-                <div className="p-4 space-y-2 text-xs text-gray-500">
-                  <div className="flex items-center gap-2">
-                    <span className="font-semibold text-gray-700">Admin Sokha Chen</span>
-                    <span className="text-gray-300">•</span>
-                    <span>Title updated</span>
-                    <span className="text-gray-300">•</span>
-                    <span className="text-gray-400">Mar 3, 2026 at 10:24 AM</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-semibold text-gray-700">Admin Sokha Chen</span>
-                    <span className="text-gray-300">•</span>
-                    <span>Total copies changed from 12 → 14</span>
-                    <span className="text-gray-300">•</span>
-                    <span className="text-gray-400">Mar 3, 2026 at 10:20 AM</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-semibold text-gray-700">Admin Sokha Chen</span>
-                    <span className="text-gray-300">•</span>
-                    <span>Book first added to inventory</span>
-                    <span className="text-gray-300">•</span>
-                    <span className="text-gray-400">Jan 15, 2024 at 09:00 AM</span>
-                  </div>
+                  <textarea value={form.description} onChange={updateField("description")} rows={4} className={`${inputCls} resize-none leading-relaxed`} />
                 </div>
               </div>
 
             </div>
 
-            {/* ACTION FOOTER */}
-            <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200 bg-gray-50/50">
-              <p className="text-xs text-gray-400 font-medium">Last edited: Mar 3, 2026 at 10:24 AM by Admin</p>
+            <div className="flex items-center justify-between px-6 py-4 border-t-2 border-gray-300 bg-gray-50/50">
+              <p className="text-xs text-gray-400 font-bold">* All fields marked are required</p>
               <div className="flex items-center gap-3">
-                <button type="button" onClick={() => navigate(`/inventory/${id}`)} className="px-5 py-2 border border-red-200 text-red-500 font-semibold rounded-md text-sm bg-white hover:bg-red-50 transition">
+                <button type="button" onClick={() => navigate(`/inventory/${id}`)} className="px-5 py-2.5 border-2 border-red-200 text-red-500 font-bold rounded-lg text-xs bg-white hover:bg-red-50 transition shadow-sm">
                   Discard Changes
                 </button>
-                <button type="button" className="px-5 py-2 rounded-md text-sm font-semibold text-white bg-[#055E83] hover:opacity-95 transition">
-                  Save & Update Book
+                <button type="button" disabled={saving} onClick={handleSave} className="px-5 py-2.5 rounded-lg text-xs font-bold text-white hover:opacity-95 transition shadow-sm" style={{ backgroundColor: HEAD_COLOR }}>
+                  {saving ? "Saving..." : "Save & Update Book"}
                 </button>
               </div>
             </div>
-
           </div>
         </div>
       </main>
-    </div>
   );
 }
 
-const INVENTORY_BOOKS = [
-  { id: "0001", deweyCode: "843.914", title: "The Little Prince", author: "Antoine de Saint-Exupéry", category: "Children / Classic Fiction", isbn: "978-0-15-246227-0", available: 8, totalCopies: 12, sectionCode: "SEC-CHD", borrowable: true, status: "AVAILABLE" },
-  { id: "0002", deweyCode: "959.6", title: "Khmer History Vol.1", author: "Chheng Phon", category: "History", isbn: "978-99950-60-1-2", available: 5, totalCopies: 5, sectionCode: "SEC-HIS", borrowable: true, status: "BORROWED" },
-  { id: "0003", deweyCode: "500.1", title: "Science for Kids", author: "Dr. Sophea Mao", category: "Science", isbn: "N/A", available: 10, totalCopies: 10, sectionCode: "SEC-SCI", borrowable: false, status: "AVAILABLE" },
-  { id: "0004", deweyCode: "294.3", title: "Buddhism & Modern Life", author: "Ven. Sithan", category: "Religion", isbn: "N/A", available: 3, totalCopies: 6, sectionCode: "SEC-REL", borrowable: true, status: "AVAILABLE" },
-  { id: "0005", deweyCode: "722.4", title: "Angkor Wat Architecture", author: "Kim Seng", category: "History", isbn: "N/A", available: 2, totalCopies: 4, sectionCode: "SEC-HIS", borrowable: false, status: "LOW STOCK" },
-  { id: "0006", deweyCode: "398.2", title: "Cambodian Folk Tales", author: "Ly Theam Teng", category: "Fiction", isbn: "N/A", available: 7, totalCopies: 8, sectionCode: "SEC-FIC", borrowable: true, status: "AVAILABLE" },
-  { id: "0007", deweyCode: "510.7", title: "Mathematics Grade 9", author: "MoEYS", category: "Science", isbn: "N/A", available: 15, totalCopies: 15, sectionCode: "SEC-SCI", borrowable: true, status: "AVAILABLE" },
-  { id: "0008", deweyCode: "428.2", title: "English for Beginners", author: "Sokha Vann", category: "Non-Fiction", isbn: "N/A", available: 0, totalCopies: 6, sectionCode: "SEC-NF", borrowable: false, status: "OUT OF STOCK" },
-];
-
-const CATEGORIES = ["All Categories", "Children", "History", "Science", "Religion", "Fiction", "Non-Fiction"];
-const STATUSES = ["All Status", "AVAILABLE", "BORROWED", "LOW STOCK", "OUT OF STOCK"];
-
-const inventoryStatusStyle = {
-  "AVAILABLE": { bg: "#E8F5E9", text: "#2E7D32" },
-  "BORROWED": { bg: "#FFFDE7", text: "#B78103" },
-  "LOW STOCK": { bg: "#FFF3E0", text: "#E65100" },
-  "OUT OF STOCK": { bg: "#FFEBEE", text: "#C62828" },
-};
-
-const stats = [
-  { label: "Total Books", value: "2,847", sub: "+24 this month", subColor: "#16A34A", border: "#055E83" },
-  { label: "Available", value: "2,103", sub: "73.9% availability rate", subColor: "#16A34A", border: "#22C55E" },
-  { label: "Currently Borrowed", value: "611", sub: "18 overdue returns", subColor: "#EF4444", border: "#F97316" },
-  { label: "Categories", value: "12", sub: "6 active genres", subColor: "#71717A", border: "#E8C110" },
-];
-
-export function Inventory() {
-  const navigate = useNavigate();
-  const [search, setSearch] = useState("");
-  const [category, setCategory] = useState("All Categories");
-  const [status, setStatus] = useState("All Status");
-  const [currentPage, setCurrentPage] = useState(1);
-  const [selectedBook, setSelectedBook] = useState(null);
-  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
-  const totalPages = 356;
-
-  const filtered = INVENTORY_BOOKS.filter((b) =>
-    (search === "" || `${b.title} ${b.author} ${b.deweyCode}`.toLowerCase().includes(search.toLowerCase())) &&
-    (category === "All Categories" || b.category.includes(category)) &&
-    (status === "All Status" || b.status.toUpperCase() === status.toUpperCase())
-  );
-
-  // Exact 10-column custom structure breakdown grid width definitions 
-  const gridLayout = "grid grid-cols-[55px_1.8fr_1.4fr_1fr_1fr_80px_1fr_1fr_1.2fr_150px] items-center gap-2 px-6";
-
-  const openDeleteProcess = (book, e) => {
-    e.stopPropagation();
-    setSelectedBook(book);
-    setIsDeleteModalOpen(true);
-  };
-
-  return (
-    <div className="flex h-screen overflow-hidden antialiased select-none bg-[#F8FAFC]">
-      <Sidebar />
-      <main className="flex-1 overflow-y-auto overflow-x-hidden">
-        <Navbar title="Inventory" breadcrumb="Welcome back, Admin!" />
-        
-        <div className="px-6 py-5 space-y-5">
-
-          {/* Metric Summary Rows Blocks */}
-          <div className="grid grid-cols-4 gap-4">
-            {stats.map(({ label, value, sub, subColor, border }) => (
-              <div key={label} className="bg-white rounded-xl px-5 py-4 border-l-4 shadow-3xs" style={{ borderLeftColor: border }}>
-                <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-1">{label}</p>
-                <p className="text-2xl font-black leading-tight text-gray-800">{value}</p>
-                <p className="text-xs mt-1 font-medium" style={{ color: subColor }}>{sub}</p>
-              </div>
-            ))}
-          </div>
-
-          {/* Table Filters Utilities Controls Section */}
-          <div className="flex items-center gap-2.5 flex-wrap bg-white p-3 rounded-xl border border-gray-100 shadow-3xs">
-            <div className="flex items-center gap-2 bg-[#F8FAFC] border border-gray-200 rounded-lg px-3 py-2 w-72 focus-within:border-[#1B4965] transition">
-              <Search size={13} className="text-gray-400 shrink-0" />
-              <input 
-                value={search} 
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search by title, author, Dewey code..."
-                className="text-xs outline-none w-full bg-transparent text-gray-600 placeholder-gray-400" 
-              />
-            </div>
-            
-            <div className="flex items-center gap-1.5 bg-[#F8FAFC] border border-gray-200 rounded-lg px-2.5 py-2">
-              <Filter size={12} className="text-gray-400" />
-              <select value={category} onChange={(e) => setCategory(e.target.value)} className="text-xs outline-none bg-transparent text-gray-600 font-medium cursor-pointer">
-                {CATEGORIES.map((c) => <option key={c}>{c}</option>)}
-              </select>
-            </div>
-
-            <div className="flex items-center gap-1.5 bg-[#F8FAFC] border border-gray-200 rounded-lg px-2.5 py-2">
-              <Filter size={12} className="text-gray-400" />
-              <select value={status} onChange={(e) => setStatus(e.target.value)} className="text-xs outline-none bg-transparent text-gray-600 font-medium cursor-pointer">
-                {STATUSES.map((s) => <option key={s}>{s}</option>)}
-              </select>
-            </div>
-
-            <div className="flex items-center gap-1.5 bg-[#F8FAFC] border border-gray-200 rounded-lg px-3 py-2 cursor-pointer hover:bg-gray-100 transition">
-              <ArrowUpDown size={12} className="text-gray-400" />
-              <span className="text-xs text-gray-600 font-medium">Sort: Title</span>
-            </div>
-
-            <p className="ml-auto text-xs text-gray-400 font-medium mr-1">
-              Showing 1–{filtered.length} of 2,847 books
-            </p>
-          </div>
-
-          {/* Central Catalog Table Container Segment Block */}
-          <div className="bg-white rounded-xl overflow-hidden border border-gray-100 shadow-xs">
-            
-            {/* Dark Blue Title Header Toolbar */}
-            <div className="flex items-center justify-between px-6 py-3.5 bg-[#055E83]">
-              <h2 className="text-white font-bold text-sm tracking-wide">
-                Book Catalog
-              </h2>
-              <button 
-                onClick={() => navigate("/inventory/add")}
-                className="flex items-center gap-1.5 px-4 py-1.5 rounded-md text-xs font-bold transition hover:opacity-95 shadow-3xs bg-[#E8C110] text-[#1B4965]"
-              >
-                + Add Book
-              </button>
-            </div>
-
-            {/* Table Header Fields Labels styling row line */}
-            <div className={`${gridLayout} py-3 bg-[#9BC1D2]/30 text-[11px] font-bold text-[#055E83] border-b border-gray-200/80 uppercase tracking-wider`}>
-              <span>ID</span>
-              <span>Title</span>
-              <span>Author</span>
-              <span>Dewey Code</span>
-              <span>Category</span>
-              <span>Copies</span>
-              <span>Section Code</span>
-              <span>Borrowable</span>
-              <span className="text-center">Status</span>
-              <span className="text-center">Actions</span>
-            </div>
-
-            {/* Catalog Matrix Collection Mapping list loop rows */}
-            <div className="divide-y divide-gray-100 bg-white">
-              {filtered.map((book) => (
-                <div 
-                  key={book.id} 
-                  onClick={() => navigate(`/inventory/${book.id}`)}
-                  className={`${gridLayout} py-3 hover:bg-slate-50/60 transition text-xs text-gray-600 items-center cursor-pointer`}
-                >
-                  <span className="text-gray-400 font-mono font-medium">{book.id}</span>
-                  <span className="font-bold text-gray-900 truncate">{book.title}</span>
-                  <span className="text-gray-500 truncate">{book.author}</span>
-                  <span className="font-mono text-gray-600 font-medium">{book.deweyCode}</span>
-                  <span className="text-gray-600 font-medium truncate">{book.category}</span>
-                  <span className="font-semibold text-gray-700">{book.available} / {book.totalCopies}</span>
-                  <span className="font-mono text-gray-400 font-bold">{book.sectionCode}</span>
-                  
-                  {/* Status pills dot toggle representation switch elements */}
-                  <div>
-                    {book.borrowable ? (
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-green-50 text-green-700 border border-green-100 shadow-3xs">
-                        <span className="w-1.5 h-1.5 rounded-full bg-green-600" /> ON
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-red-50 text-red-600 border border-red-100 shadow-3xs">
-                        <span className="w-1.5 h-1.5 rounded-full bg-red-500" /> OFF
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="text-center">
-                    <span className="inline-block text-[10px] font-bold tracking-wide px-2 py-0.5 rounded-md min-w-[95px] text-center uppercase shadow-3xs"
-                      style={{ backgroundColor: inventoryStatusStyle[book.status.toUpperCase()]?.bg || "#f3f4f6", color: inventoryStatusStyle[book.status.toUpperCase()]?.text || "#1f2937" }}>
-                      {book.status}
-                    </span>
-                  </div>
-
-                  {/* Operational block style button setups buttons grouped neatly links click connection */}
-                  <div className="flex items-center justify-center gap-1.5">
-                    <button 
-                      onClick={(e) => { e.stopPropagation(); navigate(`/inventory/${book.id}`); }}
-                      className="px-3 py-1 bg-[#055E83] text-white font-bold text-[11px] rounded hover:bg-[#044d6c] transition shadow-3xs"
-                    >
-                      View
-                    </button>
-                    <button 
-                      onClick={(e) => { e.stopPropagation(); navigate(`/inventory/${book.id}/edit`); }}
-                      className="px-3 py-1 bg-[#E8C110] text-[#1B4965] font-bold text-[11px] rounded hover:bg-[#d4b00f] transition shadow-3xs"
-                    >
-                      Edit
-                    </button>
-                    <button 
-                      onClick={(e) => openDeleteProcess(book, e)}
-                      className="p-1 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded transition ml-1"
-                    >
-                      <Trash2 size={13} />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Footer Viewport Pagination Controls */}
-          <div className="flex items-center justify-between pt-1 pb-4">
-            <p className="text-xs text-gray-400 font-medium">Page {currentPage} of {totalPages}</p>
-            <div className="flex items-center gap-1.5">
-              <button 
-                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold border border-gray-200 text-gray-500 bg-white hover:bg-gray-50 transition shadow-3xs"
-              >
-                <ChevronLeft size={13} /> Prev
-              </button>
-              {[1, 2, 3].map(n => (
-                <button 
-                  key={n} 
-                  onClick={() => setCurrentPage(n)}
-                  className="w-7 h-7 rounded-lg text-xs font-bold transition shadow-3xs"
-                  style={{ 
-                    backgroundColor: currentPage === n ? "#055E83" : "#fff", 
-                    color: currentPage === n ? "#fff" : "#64748B", 
-                    border: currentPage === n ? "none" : "1px solid #E2E8F0" 
-                  }}
-                >
-                  {n}
-                </button>
-              ))}
-              <span className="text-gray-300 text-xs px-0.5">...</span>
-              <button className="w-8 h-7 rounded-lg text-xs font-bold border border-gray-200 bg-white text-gray-500 shadow-3xs">{totalPages}</button>
-              <button 
-                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold text-white transition hover:opacity-90 bg-[#055E83] shadow-xs"
-              >
-                Next <ChevronRight size={13} />
-              </button>
-            </div>
-          </div>
-
-        </div>
-      </main>
-
-      <DeleteBookModal 
-        isOpen={isDeleteModalOpen} 
-        onClose={() => { setIsDeleteModalOpen(false); setSelectedBook(null); }} 
-        book={selectedBook} 
-      />
-    </div>
-  );
-}
-
-export default { Inventory, AddBook, BookDetails, EditBook, DeleteBookModal };
+export default { Inventory, AddBook, BookDetails, EditBook, DeleteBookModal, SuccessModal };

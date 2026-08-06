@@ -1,31 +1,119 @@
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  ArrowDownToLine, ArrowUpFromLine, Calendar, ChevronLeft, ChevronRight,
-  Clock3, FileDown, MoreVertical, RefreshCcw, Search, Table as TableIcon, TrendingUp,
+  ArrowDownToLine,
+  ArrowUpFromLine,
+  Calendar,
+  ChevronLeft,
+  ChevronRight,
+  Clock3,
+  FileDown,
+  FileSpreadsheet,
+  Loader2,
+  MoreVertical,
+  RefreshCcw,
+  Search,
+  TrendingUp,
 } from "lucide-react";
 import Navbar from "../../components/Navbar";
-import Sidebar from "../../components/Adminsidebar";
 
 const PAGE_SIZE = 4;
-const DEFAULT_DATE_RANGE = "Oct 01, 2023 - Oct 31, 2023";
+const BRAND = "#055E83";
+// Real transaction dates won't fall inside a fixed historical window, so the
+// date filter starts empty (= "no date filter") instead of a hardcoded range.
+const DEFAULT_DATE_RANGE = "";
 const tabs = ["All", "Borrowing", "Returns", "Overdue"];
-const borrowRecords = [
-  { id: "BR-10922", borrower: "Samreth Boran", uid: "#10922", initials: "SB", avatarClass: "bg-sky-100 text-[#006088]", book: "The Art of Khmer Architecture", status: "Overdue", borrowDate: "Oct 12, 2023", returnDate: "--", dueDate: "Oct 26, 2023" },
-  { id: "BR-10855", borrower: "Chan Vanny", uid: "#10855", initials: "CV", avatarClass: "bg-[#FFF3C4] text-[#9A6D00]", book: "Angkor Wat: A New History", status: "Returned", borrowDate: "Oct 15, 2023", returnDate: "Oct 29, 2023", dueDate: "Oct 30, 2023" },
-  { id: "BR-11004", borrower: "Keo Pitu", uid: "#11004", initials: "KP", avatarClass: "bg-slate-200 text-slate-600", book: "Modern Web Development", status: "Borrowed", borrowDate: "Oct 28, 2023", returnDate: "--", dueDate: "Nov 11, 2023" },
-  { id: "BR-10772", borrower: "Mealea Arun", uid: "#10772", initials: "MA", avatarClass: "bg-cyan-100 text-[#006088]", book: "Introduction to Psychology", status: "Returned", borrowDate: "Oct 20, 2023", returnDate: "Oct 30, 2023", dueDate: "Nov 03, 2023" },
-  { id: "BR-11084", borrower: "Dara Sok", uid: "#11084", initials: "DS", avatarClass: "bg-emerald-100 text-emerald-700", book: "Clean Code", status: "Borrowed", borrowDate: "Oct 31, 2023", returnDate: "--", dueDate: "Nov 14, 2023" },
-  { id: "BR-10630", borrower: "Nita Long", uid: "#10630", initials: "NL", avatarClass: "bg-rose-100 text-rose-600", book: "English Grammar Guide", status: "Overdue", borrowDate: "Oct 04, 2023", returnDate: "--", dueDate: "Oct 18, 2023" },
-  { id: "BR-10519", borrower: "Mony Rotha", uid: "#10519", initials: "MR", avatarClass: "bg-indigo-100 text-indigo-700", book: "Database System Concepts", status: "Returned", borrowDate: "Oct 11, 2023", returnDate: "Oct 23, 2023", dueDate: "Oct 25, 2023" },
-  { id: "BR-11201", borrower: "Lina Mao", uid: "#11201", initials: "LM", avatarClass: "bg-amber-100 text-amber-700", book: "Java Programming", status: "Borrowed", borrowDate: "Nov 01, 2023", returnDate: "--", dueDate: "Nov 15, 2023" },
+
+// --- API wiring -------------------------------------------------------
+// Adjust API_BASE / the auth-token lookup to match your project's actual
+// api.js / AuthContext if they differ from these assumptions.
+const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:4000/api";
+
+async function apiFetch(path, options = {}) {
+  const token = localStorage.getItem("token");
+  const res = await fetch(`${API_BASE}${path}`, {
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(options.headers || {}),
+    },
+  });
+  const json = await res.json().catch(() => null);
+  if (!res.ok || !json?.success) {
+    throw new Error(json?.message || `Request failed (${res.status})`);
+  }
+  return json;
+}
+
+const AVATAR_PALETTE = [
+  { bg: "#DBEAFE", color: "#2563EB" },
+  { bg: "#FFEDD5", color: "#EA580C" },
+  { bg: "#F1F5F9", color: "#64748B" },
+  { bg: "#CFFAFE", color: "#0E7490" },
+  { bg: "#DCFCE7", color: "#16A34A" },
+  { bg: "#FFE4E6", color: "#E11D48" },
+  { bg: "#E0E7FF", color: "#4F46E5" },
+  { bg: "#FEF3C7", color: "#B45309" },
 ];
+
+function getInitials(name = "") {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return "?";
+  return (parts[0][0] + (parts[1]?.[0] || "")).toUpperCase();
+}
+
+function avatarStyleFor(seed = "") {
+  let hash = 0;
+  for (let i = 0; i < seed.length; i++) hash = (hash * 31 + seed.charCodeAt(i)) >>> 0;
+  return AVATAR_PALETTE[hash % AVATAR_PALETTE.length];
+}
+
+function formatDate(value) {
+  if (!value) return "--";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "--";
+  return d.toLocaleDateString("en-US", { month: "short", day: "2-digit", year: "numeric" });
+}
+
+// Maps a borrow_records API row (see borrowRecordsController's `serialize`)
+// into the shape the existing UI expects. `isOverdue` comes from the API
+// (status is still 'Borrowed' in the DB until refresh-overdue runs), so we
+// show it as effectively Overdue here without needing that extra call.
+function normalizeRecord(record) {
+  const memberName = record.members?.full_name || "Unknown Member";
+  const effectiveStatus =
+    record.isOverdue && record.status === "Borrowed" ? "Overdue" : record.status;
+  const avatar = avatarStyleFor(memberName);
+  return {
+    id: `BR-${record.borrow_id}`,
+    rawId: record.borrow_id,
+    borrower: memberName,
+    uid: `#${record.member_id}`,
+    initials: getInitials(memberName),
+    avatarBg: avatar.bg,
+    avatarColor: avatar.color,
+    book: record.books?.title || "Unknown Book",
+    status: effectiveStatus,
+    borrowDate: formatDate(record.borrow_date),
+    returnDate: formatDate(record.return_date),
+    dueDate: formatDate(record.due_date),
+    borrowDateRaw: record.borrow_date,
+    dueDateRaw: record.due_date,
+  };
+}
+
+const statusBadgeStyle = {
+  Overdue: { backgroundColor: "#FEE2E2", color: "#DC2626" },
+  Returned: { backgroundColor: "#DCFCE7", color: "#16A34A" },
+  Borrowed: { backgroundColor: "#DBEAFE", color: "#2563EB" },
+};
 
 const escapeCsvValue = (val) => `"${String(val).replace(/"/g, '""')}"`;
 
 function downloadBorrowReturnCsv(rows) {
   const headers = ["Record ID", "Borrower", "User ID", "Book Title", "Status", "Borrow Date", "Return Date", "Due Date"];
-  const csvRows = rows.map(r => [r.id, r.borrower, r.uid, r.book, r.status, r.borrowDate, r.returnDate, r.dueDate]);
-  const csv = [headers, ...csvRows].map(row => row.map(escapeCsvValue).join(",")).join("\n");
+  const csvRows = rows.map((r) => [r.id, r.borrower, r.uid, r.book, r.status, r.borrowDate, r.returnDate, r.dueDate]);
+  const csv = [headers, ...csvRows].map((row) => row.map(escapeCsvValue).join(",")).join("\n");
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
@@ -35,15 +123,8 @@ function downloadBorrowReturnCsv(rows) {
   URL.revokeObjectURL(url);
 }
 
-const getStatusClass = (status) => ({
-  Overdue: "bg-red-50 text-red-600",
-  Returned: "bg-emerald-100 text-emerald-700",
-  Borrowed: "bg-pink-100 text-pink-600",
-}[status] || "bg-slate-100 text-slate-600");
-
 const parseReportDate = (value) => {
   if (!value || value === "--") return null;
-
   const parsed = new Date(`${value} 00:00:00`);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 };
@@ -63,10 +144,7 @@ const parseDateRange = (value) => {
   const start = toDayTime(startDate);
   const end = toDayTime(endDate);
 
-  return {
-    start: Math.min(start, end),
-    end: Math.max(start, end),
-  };
+  return { start: Math.min(start, end), end: Math.max(start, end) };
 };
 
 const isRecordInDateRange = (record, range) => {
@@ -81,17 +159,45 @@ const isRecordInDateRange = (record, range) => {
     });
 };
 
-function MetricCard({ title, value, note, icon: Icon, iconClass, tone = "text-[#005A76]" }) {
+function startOfWeek(date) {
+  const d = new Date(date);
+  const day = d.getDay(); // 0 = Sun .. 6 = Sat
+  const diff = (day === 0 ? -6 : 1) - day; // shift back to Monday
+  d.setDate(d.getDate() + diff);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function MetricCard({ title, value, sub, subColor, icon: Icon, iconBg, iconColor }) {
   return (
-    <article className="relative overflow-hidden rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-      <div className="relative z-10">
-        <p className="text-xs font-black text-slate-500">{title}</p>
-        <h3 className={`mt-3 text-3xl font-black tracking-normal ${tone}`}>{value}</h3>
-        <p className="mt-3 text-xs font-bold text-slate-500">{note}</p>
+    <div className="bg-white rounded-xl px-4 py-4 border border-gray-100 shadow-3xs flex flex-col gap-3">
+      <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ backgroundColor: iconBg, color: iconColor }}>
+        <Icon size={17} />
       </div>
-      <span className="absolute -bottom-8 -right-6 h-24 w-24 rounded-full bg-slate-100" />
-      <span className={`absolute right-6 top-6 flex h-10 w-10 items-center justify-center rounded-lg ${iconClass}`}><Icon size={19} /></span>
-    </article>
+      <div>
+        <p className="text-[11px] font-semibold text-gray-400 mb-1">{title}</p>
+        <p className="text-xl font-black leading-tight text-gray-900">{value}</p>
+        <p className="text-[11px] mt-1 font-semibold" style={{ color: subColor }}>{sub}</p>
+      </div>
+    </div>
+  );
+}
+
+function ExportButton({ icon: Icon, children, variant = "light", ...props }) {
+  const className =
+    variant === "primary"
+      ? "bg-[#055E83] text-white hover:bg-[#044A69] active:scale-[0.98]"
+      : "border border-gray-200 bg-white text-gray-600 shadow-3xs hover:bg-gray-50 active:scale-[0.98]";
+
+  return (
+    <button
+      type="button"
+      className={`inline-flex h-10 items-center justify-center gap-2 rounded-lg px-4 text-xs font-bold transition-all duration-150 disabled:cursor-not-allowed disabled:opacity-40 disabled:active:scale-100 ${className}`}
+      {...props}
+    >
+      <Icon size={15} />
+      {children}
+    </button>
   );
 }
 
@@ -100,22 +206,55 @@ export default function BorrowReturnReport() {
   const [currentPage, setCurrentPage] = useState(1);
   const [toast, setToast] = useState("");
 
-  const updateFilter = (key, val) => { setFilters(f => ({ ...f, [key]: val })); setCurrentPage(1); };
-  const showMessage = (msg) => { setToast(msg); setTimeout(() => setToast(""), 2200); };
+  const [records, setRecords] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  const updateFilter = (key, val) => {
+    setFilters((f) => ({ ...f, [key]: val }));
+    setCurrentPage(1);
+  };
+  const showMessage = (msg) => {
+    setToast(msg);
+    setTimeout(() => setToast(""), 2200);
+  };
+
+  const loadRecords = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
+      // limit is set high because this report filters/paginates client-side,
+      // same as the rest of this component's existing filter logic.
+      const json = await apiFetch("/borrow-records?limit=1000&page=1");
+      setRecords((json.data || []).map(normalizeRecord));
+    } catch (err) {
+      setError(err.message || "Failed to load borrow records");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadRecords();
+  }, [loadRecords]);
 
   const filteredRecords = useMemo(() => {
     const hQ = filters.header.trim().toLowerCase();
     const tQ = filters.table.trim().toLowerCase();
     const dateRange = parseDateRange(filters.date);
 
-    return borrowRecords.filter(r => {
+    return records.filter((r) => {
       const txt = `${r.id} ${r.borrower} ${r.uid} ${r.book} ${r.status} ${r.borrowDate} ${r.returnDate} ${r.dueDate}`.toLowerCase();
       const matchesSearch = (!hQ || txt.includes(hQ)) && (!tQ || txt.includes(tQ));
-      const matchesTab = filters.tab === "All" || (filters.tab === "Borrowing" && r.status === "Borrowed") || (filters.tab === "Returns" && r.status === "Returned") || (filters.tab === "Overdue" && r.status === "Overdue");
+      const matchesTab =
+        filters.tab === "All" ||
+        (filters.tab === "Borrowing" && r.status === "Borrowed") ||
+        (filters.tab === "Returns" && r.status === "Returned") ||
+        (filters.tab === "Overdue" && r.status === "Overdue");
 
       return matchesSearch && matchesTab && isRecordInDateRange(r, dateRange);
     });
-  }, [filters]);
+  }, [filters, records]);
 
   const pageCount = Math.max(1, Math.ceil(filteredRecords.length / PAGE_SIZE));
   const safePage = Math.min(currentPage, pageCount);
@@ -123,121 +262,327 @@ export default function BorrowReturnReport() {
   const showingStart = filteredRecords.length === 0 ? 0 : (safePage - 1) * PAGE_SIZE + 1;
   const showingEnd = Math.min(safePage * PAGE_SIZE, filteredRecords.length);
 
-  return (
-    <div className="flex h-screen overflow-hidden bg-[#E4ECF5]">
-      <Sidebar />
-      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        <Navbar title="Borrow/Return Reports" onBack={() => window.history.back()} searchValue={filters.header} onSearchChange={(v) => updateFilter("header", v)} searchPlaceholder="Search books, member..." />
-        
-        <main className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8">
-          {toast && <div className="fixed bottom-6 right-6 z-50 rounded bg-[#005A76] px-4 py-3 text-sm font-bold text-white shadow-lg">{toast}</div>}
+  const todayStr = useMemo(() => formatDate(new Date()), []);
+  const metrics = useMemo(() => {
+    const borrowedToday = records.filter((r) => r.borrowDate === todayStr).length;
+    const returnedToday = records.filter((r) => r.returnDate === todayStr).length;
+    const overdueCount = records.filter((r) => r.status === "Overdue").length;
+    return { borrowedToday, returnedToday, overdueCount };
+  }, [records, todayStr]);
 
-          <section className="flex justify-end">
-            <div className="flex overflow-hidden rounded-lg bg-white p-1 shadow-sm ring-1 ring-slate-200">
+  const weeklyTrend = useMemo(() => {
+    const monday = startOfWeek(new Date());
+    const buckets = Array(7).fill(0);
+    records.forEach((r) => {
+      if (!r.borrowDateRaw) return;
+      const d = new Date(r.borrowDateRaw);
+      const diffDays = Math.floor((toDayTime(d) - monday.getTime()) / 86400000);
+      if (diffDays >= 0 && diffDays < 7) buckets[diffDays] += 1;
+    });
+    return buckets;
+  }, [records]);
+  const todayIndex = useMemo(() => {
+    const day = new Date().getDay();
+    return day === 0 ? 6 : day - 1;
+  }, []);
+  const maxTrendValue = Math.max(1, ...weeklyTrend);
+
+  const overdueWatch = useMemo(
+    () =>
+      records
+        .filter((r) => r.status === "Overdue")
+        .sort((a, b) => new Date(a.dueDateRaw) - new Date(b.dueDateRaw))
+        .slice(0, 6),
+    [records]
+  );
+
+  return (
+    <div className="flex-1 bg-[#E9EEF4]">
+        <Navbar
+          title="Borrow/Return Reports"
+          breadcrumb="View and analyze borrow and return records"
+          onBack={() => window.history.back()}
+          searchValue={filters.header}
+          onSearchChange={(v) => updateFilter("header", v)}
+          searchPlaceholder="Search books, member..."
+        />
+
+        <div className="px-6 py-5 space-y-5">
+          {toast && (
+            <div className="fixed bottom-6 right-6 z-50 rounded-lg bg-[#055E83] px-4 py-3 text-sm font-bold text-white shadow-lg animate-in fade-in slide-in-from-bottom-2 duration-200">
+              {toast}
+            </div>
+          )}
+
+          {error && (
+            <div className="flex items-center justify-between rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-xs font-bold text-red-600">
+              <span>{error}</span>
+              <button type="button" onClick={loadRecords} className="rounded-md bg-red-600 px-3 py-1.5 text-white">
+                Retry
+              </button>
+            </div>
+          )}
+
+          {/* TABS */}
+          <div className="flex items-center justify-between">
+            <button
+              type="button"
+              onClick={loadRecords}
+              disabled={loading}
+              className="inline-flex h-9 items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 text-[11px] font-bold text-gray-600 shadow-3xs transition hover:bg-gray-50 disabled:opacity-50"
+            >
+              {loading ? <Loader2 size={14} className="animate-spin" /> : <RefreshCcw size={14} />}
+              {loading ? "Loading..." : "Refresh"}
+            </button>
+
+            <div className="flex overflow-hidden rounded-lg bg-white p-1 shadow-3xs ring-1 ring-gray-100">
               {tabs.map((tab) => (
-                <button type="button" key={tab} onClick={() => updateFilter("tab", tab)} className={`rounded-md px-4 py-2 text-[11px] font-black transition ${filters.tab === tab ? "bg-[#005A76] text-white" : "text-slate-600 hover:bg-slate-50"}`}>{tab}</button>
+                <button
+                  type="button"
+                  key={tab}
+                  onClick={() => updateFilter("tab", tab)}
+                  className={`rounded-md px-4 py-2 text-[11px] font-bold transition ${
+                    filters.tab === tab ? "bg-[#055E83] text-white" : "text-gray-600 hover:bg-gray-50"
+                  }`}
+                >
+                  {tab}
+                </button>
               ))}
             </div>
-          </section>
+          </div>
 
-          <section className="mt-5 rounded-lg border border-slate-200 bg-white p-4 shadow-sm flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-            <div className="flex flex-col gap-3 md:flex-row md:flex-wrap">
-              <label className="relative">
-                <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input type="search" value={filters.table} onChange={(e) => updateFilter("table", e.target.value)} placeholder="Filter by name or book title..." className="h-10 w-full min-w-72 rounded-md border border-slate-100 bg-slate-50 pl-9 pr-3 text-xs font-bold text-slate-600 outline-none transition focus:border-[#005A76] focus:bg-white" />
+          {/* FILTERS + EXPORT ROW */}
+          <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <label className="relative block">
+                <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                <input
+                  type="search"
+                  value={filters.table}
+                  onChange={(e) => updateFilter("table", e.target.value)}
+                  placeholder="Filter by name or book title..."
+                  className="h-10 w-full min-w-64 rounded-lg border border-gray-200 bg-white pl-9 pr-3 text-xs font-semibold text-gray-600 shadow-3xs outline-none transition focus:border-[#055E83] focus:ring-2 focus:ring-[#055E83]/10"
+                />
               </label>
-              <label className="relative">
-                <Calendar size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-                <input value={filters.date} onChange={(e) => updateFilter("date", e.target.value)} className="h-10 w-full min-w-56 rounded-md border border-slate-100 bg-slate-50 pl-9 pr-3 text-xs font-bold text-slate-600 outline-none transition focus:border-[#005A76] focus:bg-white" />
+              <label className="relative block">
+                <Calendar size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                <input
+                  value={filters.date}
+                  onChange={(e) => updateFilter("date", e.target.value)}
+                  placeholder="e.g. Jul 01, 2026 - Jul 31, 2026"
+                  className="h-10 w-full min-w-56 rounded-lg border border-gray-200 bg-white pl-9 pr-3 text-xs font-semibold text-gray-600 shadow-3xs outline-none transition focus:border-[#055E83] focus:ring-2 focus:ring-[#055E83]/10"
+                />
               </label>
             </div>
+
             <div className="flex flex-wrap gap-2">
-              <button type="button" onClick={() => { setFilters({ header: "", table: "", tab: "All", date: DEFAULT_DATE_RANGE }); setCurrentPage(1); showMessage("Filters reset"); }} className="inline-flex h-10 items-center gap-2 rounded-md border border-slate-200 bg-white px-4 text-xs font-black text-slate-600 transition hover:border-[#005A76] hover:text-[#005A76]"><RefreshCcw size={15} />Reset</button>
-              <button type="button" onClick={() => window.print()} className="inline-flex h-10 items-center gap-2 rounded-md border border-[#005A76] bg-white px-4 text-xs font-black text-[#005A76] transition hover:bg-[#E6F4F7]"><FileDown size={15} />Export PDF</button>
-              <button type="button" onClick={() => filteredRecords.length ? (downloadBorrowReturnCsv(filteredRecords), showMessage("Borrow/return report exported")) : showMessage("No records to export")} disabled={filteredRecords.length === 0} className="inline-flex h-10 items-center gap-2 rounded-md bg-[#005A76] px-4 text-xs font-black text-white shadow-sm transition hover:bg-[#00445a] disabled:cursor-not-allowed disabled:opacity-50"><TableIcon size={15} />Excel</button>
+              <ExportButton
+                icon={RefreshCcw}
+                onClick={() => {
+                  setFilters({ header: "", table: "", tab: "All", date: DEFAULT_DATE_RANGE });
+                  setCurrentPage(1);
+                  showMessage("Filters reset");
+                }}
+              >
+                Reset
+              </ExportButton>
+              <ExportButton icon={FileDown} onClick={() => window.print()}>Export PDF</ExportButton>
+              <ExportButton
+                icon={FileSpreadsheet}
+                variant="primary"
+                onClick={() => {
+                  filteredRecords.length ? (downloadBorrowReturnCsv(filteredRecords), showMessage("Borrow/return report exported")) : showMessage("No records to export");
+                }}
+                disabled={filteredRecords.length === 0}
+              >
+                Excel
+              </ExportButton>
             </div>
-          </section>
+          </div>
 
-          <section className="mt-6 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+          {/* RECORDS TABLE */}
+          <div className="bg-white rounded-xl border border-gray-100 shadow-3xs overflow-hidden">
+            <div className="border-b border-gray-100 px-5 py-4">
+              <h3 className="text-sm font-bold text-gray-800">Borrow / Return Records</h3>
+              <p className="mt-1 text-xs font-semibold text-gray-400">Active loans, returns, and overdue tracking</p>
+            </div>
+
             <div className="overflow-x-auto">
               <table className="w-full min-w-[900px] text-left">
-                <thead className="bg-slate-50 text-[11px] uppercase text-slate-500">
-                  <tr>{["Borrower Name", "Book Title", "Status", "Borrow Date", "Return Date", "Due Date", ""].map((h, i) => <th key={i} className={`px-6 py-4 font-black ${h === "Status" ? "text-center" : ""} ${h === "" ? "w-12 px-3" : ""}`}>{h}</th>)}</tr>
+                <thead className="sticky top-0 z-[1] bg-gray-50/90 backdrop-blur text-[10px] uppercase tracking-wider text-gray-400">
+                  <tr>
+                    {["Borrower Name", "Book Title", "Status", "Borrow Date", "Return Date", "Due Date", ""].map((h) => (
+                      <th key={h} className={`px-5 py-3.5 font-bold ${h === "Status" ? "text-center" : ""} ${h === "" ? "w-12 px-3" : ""}`}>
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100 text-sm">
-                  {visibleRecords.map((record) => (
-                    <tr key={record.id} className="transition hover:bg-slate-50">
-                      <td className="px-6 py-4 flex items-center gap-3">
-                        <span className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-[10px] font-black ${record.avatarClass}`}>{record.initials}</span>
-                        <div>
-                          <p className="font-black leading-tight text-slate-800">{record.borrower}</p>
-                          <p className="mt-0.5 text-[11px] font-semibold text-slate-400">UID: {record.uid}</p>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 max-w-56"><p className="font-semibold leading-snug text-slate-700">{record.book}</p></td>
-                      <td className="px-6 py-4 text-center"><span className={`inline-flex rounded-full px-3 py-1 text-[10px] font-black ${getStatusClass(record.status)}`}>{record.status}</span></td>
-                      <td className="px-6 py-4 text-xs font-semibold text-slate-700">{record.borrowDate}</td>
-                      <td className="px-6 py-4 text-xs font-semibold text-slate-500">{record.returnDate}</td>
-                      <td className={`px-6 py-4 text-xs font-black ${record.status === "Overdue" ? "text-red-600" : "text-slate-700"}`}>{record.dueDate}</td>
-                      <td className="px-3 py-4">
-                        <button type="button" onClick={() => showMessage(`${record.borrower} - ${record.status}`)} className="flex h-8 w-8 items-center justify-center rounded-md text-slate-500 transition hover:bg-slate-100 hover:text-[#005A76]" aria-label={`View actions for ${record.borrower}`}><MoreVertical size={17} /></button>
+                <tbody className="divide-y divide-gray-100 text-sm">
+                  {loading && !records.length && (
+                    <tr>
+                      <td colSpan="7" className="px-5 py-16 text-center">
+                        <Loader2 size={20} className="mx-auto animate-spin text-[#055E83]" />
+                        <p className="mt-2 text-xs font-bold text-gray-400">Loading borrow records...</p>
                       </td>
                     </tr>
-                  ))}
-                  {!visibleRecords.length && <tr><td colSpan="7" className="px-6 py-12 text-center text-sm font-semibold text-slate-400">No borrow or return records found.</td></tr>}
+                  )}
+
+                  {!loading &&
+                    visibleRecords.map((record) => (
+                      <tr key={record.id} className="transition-colors hover:bg-gray-50/80">
+                        <td className="px-5 py-4">
+                          <div className="flex items-center gap-3">
+                            <span
+                              className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full text-[11px] font-black"
+                              style={{ backgroundColor: record.avatarBg, color: record.avatarColor }}
+                            >
+                              {record.initials}
+                            </span>
+                            <span className="min-w-0">
+                              <span className="block truncate font-bold leading-tight text-gray-800">{record.borrower}</span>
+                              <span className="mt-0.5 block text-[11px] font-semibold text-gray-400">UID: {record.uid}</span>
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-5 py-4 max-w-56">
+                          <p className="font-semibold leading-snug text-gray-700">{record.book}</p>
+                        </td>
+                        <td className="px-5 py-4 text-center">
+                          <span className="inline-flex rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide" style={statusBadgeStyle[record.status]}>
+                            {record.status}
+                          </span>
+                        </td>
+                        <td className="px-5 py-4 text-xs font-semibold text-gray-700">{record.borrowDate}</td>
+                        <td className="px-5 py-4 text-xs font-semibold text-gray-500">{record.returnDate}</td>
+                        <td className={`px-5 py-4 text-xs font-black ${record.status === "Overdue" ? "text-red-600" : "text-gray-700"}`}>{record.dueDate}</td>
+                        <td className="px-3 py-4">
+                          <button
+                            type="button"
+                            onClick={() => showMessage(`${record.borrower} - ${record.book} - ${record.status}`)}
+                            className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-500 transition hover:bg-gray-100 hover:text-[#055E83]"
+                            aria-label={`View actions for ${record.borrower}`}
+                          >
+                            <MoreVertical size={16} />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+
+                  {!loading && !visibleRecords.length && (
+                    <tr>
+                      <td colSpan="7" className="px-5 py-16 text-center">
+                        <p className="text-sm font-bold text-gray-500">No borrow or return records found</p>
+                        <p className="mt-1 text-xs font-medium text-gray-400">Try adjusting your filters or search terms</p>
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
 
-            <div className="flex flex-col gap-3 border-t border-slate-100 bg-white px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
-              <p className="text-xs font-semibold text-slate-500">Showing {showingStart}-{showingEnd} of {filteredRecords.length} records</p>
-              <div className="flex items-center gap-2">
-                <button type="button" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={safePage === 1} className="flex h-8 w-8 items-center justify-center rounded-md text-slate-500 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40" aria-label="Previous page"><ChevronLeft size={16} /></button>
+            <div className="flex flex-col gap-3 border-t border-gray-100 bg-white px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-xs font-semibold text-gray-500">
+                Showing {showingStart}-{showingEnd} of {filteredRecords.length} records
+              </p>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  disabled={safePage === 1}
+                  className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-500 transition hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40"
+                  aria-label="Previous page"
+                >
+                  <ChevronLeft size={16} />
+                </button>
                 {Array.from({ length: pageCount }, (_, i) => i + 1).map((page) => (
-                  <button type="button" key={page} onClick={() => setCurrentPage(page)} className={`flex h-8 w-8 items-center justify-center rounded-md text-xs font-black transition ${safePage === page ? "bg-[#005A76] text-white" : "text-slate-600 hover:bg-slate-100"}`}>{page}</button>
+                  <button
+                    type="button"
+                    key={page}
+                    onClick={() => setCurrentPage(page)}
+                    className={`flex h-8 w-8 items-center justify-center rounded-lg text-xs font-bold transition ${
+                      safePage === page ? "bg-[#055E83] text-white" : "text-gray-600 hover:bg-gray-100"
+                    }`}
+                  >
+                    {page}
+                  </button>
                 ))}
-                <button type="button" onClick={() => setCurrentPage(p => Math.min(pageCount, p + 1))} disabled={safePage === pageCount} className="flex h-8 w-8 items-center justify-center rounded-md text-slate-500 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40" aria-label="Next page"><ChevronRight size={16} /></button>
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage((p) => Math.min(pageCount, p + 1))}
+                  disabled={safePage === pageCount}
+                  className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-500 transition hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40"
+                  aria-label="Next page"
+                >
+                  <ChevronRight size={16} />
+                </button>
               </div>
             </div>
-          </section>
+          </div>
 
-          <section className="mt-6 grid grid-cols-1 gap-5 md:grid-cols-3">
-            <MetricCard title="Total Borrowed Today" value="42" note="+12% from yesterday" icon={ArrowUpFromLine} iconClass="bg-sky-100 text-[#006088]" />
-            <MetricCard title="Books Returned Today" value="38" note="Recent: 15 mins ago" icon={ArrowDownToLine} iconClass="bg-[#FFF3C4] text-[#9A6D00]" tone="text-[#7A5A00]" />
-            <MetricCard title="Currently Overdue" value="15" note="Urgent requires attention" icon={RefreshCcw} iconClass="bg-red-100 text-red-600" tone="text-red-600" />
-          </section>
+          {/* METRIC CARDS */}
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+            <MetricCard title="Total Borrowed Today" value={metrics.borrowedToday} sub="Today" subColor="#71717A" icon={ArrowUpFromLine} iconBg="#DBEAFE" iconColor="#2563EB" />
+            <MetricCard title="Books Returned Today" value={metrics.returnedToday} sub="Today" subColor="#71717A" icon={ArrowDownToLine} iconBg="#FFEDD5" iconColor="#EA580C" />
+            <MetricCard title="Currently Overdue" value={metrics.overdueCount} sub="Urgent, requires attention" subColor="#DC2626" icon={RefreshCcw} iconBg="#FEE2E2" iconColor="#DC2626" />
+          </div>
 
-          <section className="mt-5 grid grid-cols-1 gap-5 md:grid-cols-2">
-            <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-              <div className="flex items-center gap-2 text-[#005A76]"><TrendingUp size={18} /><h2 className="text-sm font-black">Weekly Borrowing Trend</h2></div>
+          {/* TREND + OVERDUE WATCH */}
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div className="bg-white rounded-xl border border-gray-100 shadow-3xs p-5">
+              <div className="flex items-center gap-2 text-[#055E83]">
+                <TrendingUp size={18} />
+                <h3 className="text-sm font-bold">Weekly Borrowing Trend</h3>
+              </div>
               <div className="mt-5 flex h-28 items-end gap-3">
-                {[42, 35, 48, 40, 55, 38, 44].map((v, i) => (
+                {weeklyTrend.map((v, i) => (
                   <div key={i} className="flex min-w-0 flex-1 flex-col items-center gap-2">
-                    <div className={`w-full rounded-t-md ${i === 4 ? "bg-[#F5C842]" : "bg-[#B7CBD6]"}`} style={{ height: `${Math.max(20, v * 1.5)}%` }} />
-                    <span className="text-[10px] font-black text-slate-400">{["M", "T", "W", "T", "F", "S", "S"][i]}</span>
+                    <div
+                      className={`w-full rounded-t-md ${i === todayIndex ? "bg-[#F5C842]" : "bg-[#BFDCE8]"}`}
+                      style={{ height: `${Math.max(6, (v / maxTrendValue) * 100)}%` }}
+                    />
+                    <span className="text-[10px] font-bold text-gray-400">{["M", "T", "W", "T", "F", "S", "S"][i]}</span>
                   </div>
                 ))}
               </div>
             </div>
 
-            <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-              <div className="flex items-center gap-2 text-red-600"><Clock3 size={18} /><h2 className="text-sm font-black">Overdue Watch</h2></div>
+            <div className="bg-white rounded-xl border border-gray-100 shadow-3xs p-5">
+              <div className="flex items-center gap-2 text-red-600">
+                <Clock3 size={18} />
+                <h3 className="text-sm font-bold">Overdue Watch</h3>
+              </div>
               <div className="mt-4 space-y-3">
-                {borrowRecords.filter(r => r.status === "Overdue").map((r) => (
-                  <button type="button" key={r.id} onClick={() => { setFilters(f => ({ ...f, tab: "Overdue", table: r.borrower })); setCurrentPage(1); }} className="flex w-full items-center gap-3 rounded-md p-2 text-left transition hover:bg-red-50">
-                    <span className={`flex h-8 w-8 items-center justify-center rounded-full text-[10px] font-black ${r.avatarClass}`}>{r.initials}</span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-xs font-black text-slate-700">{r.borrower}</span>
-                      <span className="block truncate text-[11px] font-semibold text-slate-400">Due {r.dueDate}</span>
+                {overdueWatch.map((r) => (
+                  <button
+                    type="button"
+                    key={r.id}
+                    onClick={() => {
+                      setFilters((f) => ({ ...f, tab: "Overdue", table: r.borrower }));
+                      setCurrentPage(1);
+                    }}
+                    className="flex w-full items-center gap-3 rounded-lg p-2 text-left transition hover:bg-red-50"
+                  >
+                    <span
+                      className="flex h-8 w-8 items-center justify-center rounded-full text-[10px] font-black"
+                      style={{ backgroundColor: r.avatarBg, color: r.avatarColor }}
+                    >
+                      {r.initials}
                     </span>
-                    <span className="text-[11px] font-black text-red-600">Overdue</span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-xs font-bold text-gray-700">{r.borrower}</span>
+                      <span className="block truncate text-[11px] font-semibold text-gray-400">Due {r.dueDate}</span>
+                    </span>
+                    <span className="text-[11px] font-bold text-red-600">Overdue</span>
                   </button>
                 ))}
+                {!overdueWatch.length && (
+                  <p className="px-2 py-4 text-center text-xs font-semibold text-gray-400">No overdue books right now</p>
+                )}
               </div>
             </div>
-          </section>
-        </main>
-      </div>
+          </div>
+        </div>
     </div>
   );
 }

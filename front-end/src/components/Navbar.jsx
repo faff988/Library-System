@@ -1,6 +1,27 @@
+import { useEffect, useState } from "react";
 import { Search, Bell, User, ArrowLeft } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import api from "../utils/api";
 
 export default function Navbar({ title, breadcrumb, onBack }) {
+  const navigate = useNavigate();
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    fetchUnreadCount();
+  }, []);
+
+  const fetchUnreadCount = async () => {
+    try {
+      // Query server for unread notifications count
+      const res = await api.get("/notifications?unreadOnly=true&limit=1");
+      const total = res.data?.meta?.totalItems ?? res.data?.meta?.total ?? 0;
+      setUnreadCount(total);
+    } catch (err) {
+      console.error("Failed to fetch notification count:", err);
+    }
+  };
+
   return (
     <div className="flex items-center justify-between px-6 py-6.5 bg-white border-b border-gray-100 shadow-sm select-none sticky top-0 z-10">
       <div className="flex items-center gap-3">
@@ -37,10 +58,20 @@ export default function Navbar({ title, breadcrumb, onBack }) {
             className="text-sm outline-none w-full bg-transparent text-gray-600 placeholder-gray-400 font-normal"
           />
         </div>
-        <button className="relative p-2 rounded-full hover:bg-gray-100 transition">
+
+        {/* Bell Button */}
+        <button
+          onClick={() => navigate("/notifications")}
+          className="relative p-2 rounded-full hover:bg-gray-100 transition"
+        >
           <Bell size={18} className="text-gray-400" />
-          <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-[#F5C842] rounded-full border border-white" />
+          
+          {/* RED DOT: Appears ONLY when there are unread notifications */}
+          {unreadCount > 0 && (
+            <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full ring-2 ring-white" />
+          )}
         </button>
+
         <button className="w-8 h-8 rounded-full bg-[#1B4965] flex items-center justify-center hover:bg-[#14374d] transition shadow-inner">
           <User size={16} className="text-white" />
         </button>

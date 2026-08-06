@@ -8,6 +8,6 @@ export default defineConfig({
   },
   datasource: {
     // Force a fallback string with an empty password if process.env isn't loading right
-    url: process.env["DATABASE_URL"] || "mysql://root:@localhost:3307/sr_lib_test",
+    url: process.env["DATABASE_URL"],
   },
 });
