@@ -935,7 +935,7 @@ export default function BookInventoryReport() {
       ];
 
   return (
-    <div className="flex min-w-0 flex-1 flex-col">
+    <div className="flex min-w-0 flex-1 flex-col bg-[#E9EEF4]">
         <Navbar
           title="Book Inventory Report"
           breadcrumb="Reports"

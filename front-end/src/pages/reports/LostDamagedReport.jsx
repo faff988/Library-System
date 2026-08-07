@@ -1040,7 +1040,7 @@ export default function LostDamagedReport() {
   };
 
   return (
-    <div className="flex min-w-0 flex-1 flex-col">
+    <div className="flex min-w-0 flex-1 flex-col bg-[#E9EEF4]">
         <Navbar
           title="Lost or Damaged Book Report"
           breadcrumb="Reports"

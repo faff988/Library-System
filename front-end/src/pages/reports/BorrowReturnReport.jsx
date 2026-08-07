@@ -170,7 +170,7 @@ function startOfWeek(date) {
 
 function MetricCard({ title, value, sub, subColor, icon: Icon, iconBg, iconColor }) {
   return (
-    <div className="bg-white rounded-xl px-4 py-4 border border-gray-100 shadow-3xs flex flex-col gap-3">
+    <div className="bg-white rounded-xl px-4 py-4 border border-gray-300 shadow-3xs flex flex-col gap-3">
       <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ backgroundColor: iconBg, color: iconColor }}>
         <Icon size={17} />
       </div>
@@ -187,7 +187,7 @@ function ExportButton({ icon: Icon, children, variant = "light", ...props }) {
   const className =
     variant === "primary"
       ? "bg-[#055E83] text-white hover:bg-[#044A69] active:scale-[0.98]"
-      : "border border-gray-200 bg-white text-gray-600 shadow-3xs hover:bg-gray-50 active:scale-[0.98]";
+      : "border border-gray-300 bg-white text-gray-600 shadow-3xs hover:bg-gray-50 active:scale-[0.98]";
 
   return (
     <button
@@ -323,13 +323,20 @@ export default function BorrowReturnReport() {
             </div>
           )}
 
+          {/* METRIC CARDS */}
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+            <MetricCard title="Total Borrowed Today" value={metrics.borrowedToday} sub="Today" subColor="#71717A" icon={ArrowUpFromLine} iconBg="#DBEAFE" iconColor="#2563EB" />
+            <MetricCard title="Books Returned Today" value={metrics.returnedToday} sub="Today" subColor="#71717A" icon={ArrowDownToLine} iconBg="#FFEDD5" iconColor="#EA580C" />
+            <MetricCard title="Currently Overdue" value={metrics.overdueCount} sub="Urgent, requires attention" subColor="#DC2626" icon={RefreshCcw} iconBg="#FEE2E2" iconColor="#DC2626" />
+          </div>
+
           {/* TABS */}
           <div className="flex items-center justify-between">
             <button
               type="button"
               onClick={loadRecords}
               disabled={loading}
-              className="inline-flex h-9 items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 text-[11px] font-bold text-gray-600 shadow-3xs transition hover:bg-gray-50 disabled:opacity-50"
+              className="inline-flex h-9 items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 text-[11px] font-bold text-gray-600 shadow-3xs transition hover:bg-gray-50 disabled:opacity-50"
             >
               {loading ? <Loader2 size={14} className="animate-spin" /> : <RefreshCcw size={14} />}
               {loading ? "Loading..." : "Refresh"}
@@ -361,7 +368,7 @@ export default function BorrowReturnReport() {
                   value={filters.table}
                   onChange={(e) => updateFilter("table", e.target.value)}
                   placeholder="Filter by name or book title..."
-                  className="h-10 w-full min-w-64 rounded-lg border border-gray-200 bg-white pl-9 pr-3 text-xs font-semibold text-gray-600 shadow-3xs outline-none transition focus:border-[#055E83] focus:ring-2 focus:ring-[#055E83]/10"
+                  className="h-10 w-full min-w-64 rounded-lg border border-gray-300 bg-white pl-9 pr-3 text-xs font-semibold text-gray-600 shadow-3xs outline-none transition focus:border-[#055E83] focus:ring-2 focus:ring-[#055E83]/10"
                 />
               </label>
               <label className="relative block">
@@ -370,7 +377,7 @@ export default function BorrowReturnReport() {
                   value={filters.date}
                   onChange={(e) => updateFilter("date", e.target.value)}
                   placeholder="e.g. Jul 01, 2026 - Jul 31, 2026"
-                  className="h-10 w-full min-w-56 rounded-lg border border-gray-200 bg-white pl-9 pr-3 text-xs font-semibold text-gray-600 shadow-3xs outline-none transition focus:border-[#055E83] focus:ring-2 focus:ring-[#055E83]/10"
+                  className="h-10 w-full min-w-56 rounded-lg border border-gray-300 bg-white pl-9 pr-3 text-xs font-semibold text-gray-600 shadow-3xs outline-none transition focus:border-[#055E83] focus:ring-2 focus:ring-[#055E83]/10"
                 />
               </label>
             </div>
@@ -401,8 +408,8 @@ export default function BorrowReturnReport() {
           </div>
 
           {/* RECORDS TABLE */}
-          <div className="bg-white rounded-xl border border-gray-100 shadow-3xs overflow-hidden">
-            <div className="border-b border-gray-100 px-5 py-4">
+          <div className="bg-white rounded-xl border border-gray-300 shadow-3xs overflow-hidden">
+            <div className="border-b border-gray-300 px-5 py-4">
               <h3 className="text-sm font-bold text-gray-800">Borrow / Return Records</h3>
               <p className="mt-1 text-xs font-semibold text-gray-400">Active loans, returns, and overdue tracking</p>
             </div>
@@ -481,7 +488,7 @@ export default function BorrowReturnReport() {
               </table>
             </div>
 
-            <div className="flex flex-col gap-3 border-t border-gray-100 bg-white px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-col gap-3 border-t border-gray-300 bg-white px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-xs font-semibold text-gray-500">
                 Showing {showingStart}-{showingEnd} of {filteredRecords.length} records
               </p>
@@ -520,16 +527,9 @@ export default function BorrowReturnReport() {
             </div>
           </div>
 
-          {/* METRIC CARDS */}
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-            <MetricCard title="Total Borrowed Today" value={metrics.borrowedToday} sub="Today" subColor="#71717A" icon={ArrowUpFromLine} iconBg="#DBEAFE" iconColor="#2563EB" />
-            <MetricCard title="Books Returned Today" value={metrics.returnedToday} sub="Today" subColor="#71717A" icon={ArrowDownToLine} iconBg="#FFEDD5" iconColor="#EA580C" />
-            <MetricCard title="Currently Overdue" value={metrics.overdueCount} sub="Urgent, requires attention" subColor="#DC2626" icon={RefreshCcw} iconBg="#FEE2E2" iconColor="#DC2626" />
-          </div>
-
           {/* TREND + OVERDUE WATCH */}
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <div className="bg-white rounded-xl border border-gray-100 shadow-3xs p-5">
+            <div className="bg-white rounded-xl border border-gray-300 shadow-3xs p-5">
               <div className="flex items-center gap-2 text-[#055E83]">
                 <TrendingUp size={18} />
                 <h3 className="text-sm font-bold">Weekly Borrowing Trend</h3>
@@ -547,7 +547,7 @@ export default function BorrowReturnReport() {
               </div>
             </div>
 
-            <div className="bg-white rounded-xl border border-gray-100 shadow-3xs p-5">
+            <div className="bg-white rounded-xl border border-gray-300 shadow-3xs p-5">
               <div className="flex items-center gap-2 text-red-600">
                 <Clock3 size={18} />
                 <h3 className="text-sm font-bold">Overdue Watch</h3>

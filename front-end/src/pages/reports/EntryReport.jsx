@@ -624,7 +624,7 @@ function computePurposeDistribution(entries) {
 function MetricCard({ card }) {
   const Icon = card.icon;
   return (
-    <article className="relative overflow-hidden rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+    <article className="relative overflow-hidden rounded-lg border border-slate-300 bg-white p-5 shadow-sm">
       <span className={`absolute left-0 top-0 h-full w-1 ${card.accentClass}`} />
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
@@ -644,7 +644,7 @@ function EntryTrendChart({ byDay, loading }) {
   const maxValue = Math.max(1, ...byDay.map((d) => d.count));
 
   return (
-    <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+    <section className="rounded-lg border border-gray-300 bg-white p-5 shadow-sm">
       <div className="flex items-center justify-between gap-3">
         <h2 className="text-sm font-black text-slate-800">Daily Entries</h2>
         <span className="text-[11px] font-bold text-slate-400">{byDay.length} day(s)</span>
@@ -660,7 +660,7 @@ function EntryTrendChart({ byDay, loading }) {
         </div>
       ) : (
         <>
-          <div className="mt-5 flex h-48 items-end gap-2 border-b border-slate-100">
+          <div className="mt-5 flex h-48 items-end gap-2 border-b border-gray-200">
             {byDay.map((d) => (
               <div key={d.day} className="relative flex h-full min-w-0 flex-1 items-end" title={`${d.day}: ${d.count}`}>
                 <div
@@ -685,7 +685,7 @@ function EntryTrendChart({ byDay, loading }) {
 
 function PurposeDistribution({ items, loading }) {
   return (
-    <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+    <section className="rounded-lg border border-gray-300 bg-white p-5 shadow-sm">
       <h2 className="text-sm font-black text-slate-800">Visit Purpose Distribution</h2>
 
       {loading ? (
@@ -869,7 +869,7 @@ export default function EntryReport() {
         ];
 
   return (
-    <div className="flex min-w-0 flex-1 flex-col">
+    <div className="flex min-w-0 flex-1 flex-col bg-[#E9EEF4]">
         <Navbar
           title="Entry Report"
           onBack={() => window.history.back()}
@@ -887,7 +887,7 @@ export default function EntryReport() {
                   type="date"
                   value={startDate}
                   onChange={(e) => { setStartDate(e.target.value); setCurrentPage(1); }}
-                  className="h-10 w-full rounded-md border border-slate-200 bg-white pl-9 pr-3 text-xs font-bold text-slate-600 shadow-sm outline-none transition focus:border-[#005A76] focus:ring-2 focus:ring-[#005A76]/10"
+                  className="h-10 w-full rounded-md border border-gray-300 bg-white pl-9 pr-3 text-xs font-bold text-slate-600 shadow-sm outline-none transition focus:border-[#005A76] focus:ring-2 focus:ring-[#005A76]/10"
                 />
               </label>
               <label className="relative block min-w-[150px]">
@@ -896,13 +896,13 @@ export default function EntryReport() {
                   type="date"
                   value={endDate}
                   onChange={(e) => { setEndDate(e.target.value); setCurrentPage(1); }}
-                  className="h-10 w-full rounded-md border border-slate-200 bg-white pl-9 pr-3 text-xs font-bold text-slate-600 shadow-sm outline-none transition focus:border-[#005A76] focus:ring-2 focus:ring-[#005A76]/10"
+                  className="h-10 w-full rounded-md border border-gray-300 bg-white pl-9 pr-3 text-xs font-bold text-slate-600 shadow-sm outline-none transition focus:border-[#005A76] focus:ring-2 focus:ring-[#005A76]/10"
                 />
               </label>
               <button
                 type="button"
                 onClick={resetFilters}
-                className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-slate-200 bg-white px-4 text-xs font-black text-slate-600 transition hover:border-[#005A76] hover:text-[#005A76]"
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-gray-300 bg-white px-4 text-xs font-black text-slate-600 transition hover:border-[#005A76] hover:text-[#005A76]"
               >
                 <RotateCcw size={15} />
                 Reset
@@ -913,7 +913,7 @@ export default function EntryReport() {
               <button
                 type="button"
                 onClick={() => window.print()}
-                className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-slate-200 bg-white px-4 text-xs font-black text-slate-600 shadow-sm transition hover:border-[#005A76] hover:text-[#005A76]"
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-gray-300 bg-white px-4 text-xs font-black text-slate-600 shadow-sm transition hover:border-[#005A76] hover:text-[#005A76]"
               >
                 <FileDown size={15} />
                 PDF
@@ -921,7 +921,7 @@ export default function EntryReport() {
               <button
                 type="button"
                 onClick={handleExportCsv}
-                className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-slate-200 bg-white px-4 text-xs font-black text-slate-600 shadow-sm transition hover:border-[#005A76] hover:text-[#005A76]"
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-gray-300 bg-white px-4 text-xs font-black text-slate-600 shadow-sm transition hover:border-[#005A76] hover:text-[#005A76]"
               >
                 <FileSpreadsheet size={15} />
                 Excel
@@ -939,7 +939,7 @@ export default function EntryReport() {
 
           <section className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
             {summaryLoading || !summary ? (
-              <div className="col-span-full rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-400 shadow-sm">
+              <div className="col-span-full rounded-lg border border-gray-300 bg-white p-4 text-sm text-slate-400 shadow-sm">
                 Loading summary...
               </div>
             ) : (
@@ -952,8 +952,8 @@ export default function EntryReport() {
             <PurposeDistribution items={purposeItems} loading={summaryLoading} />
           </section>
 
-          <section className="mt-5 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-            <div className="flex flex-col gap-3 border-b border-slate-100 px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
+          <section className="mt-5 overflow-hidden rounded-lg border border-gray-300 bg-white shadow-sm">
+            <div className="flex flex-col gap-3 border-b border-gray-200 px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
               <div>
                 <h2 className="text-sm font-black text-slate-800">Entry Log</h2>
                 <p className="mt-1 text-xs font-semibold text-slate-400">Recorded library visits and their stated purpose</p>
@@ -965,7 +965,7 @@ export default function EntryReport() {
                   value={searchInput}
                   onChange={(e) => setSearchInput(e.target.value)}
                   placeholder="Filter by attendee name..."
-                  className="h-10 w-full min-w-64 rounded-md border border-slate-200 bg-slate-50 pl-9 pr-3 text-xs font-bold text-slate-600 outline-none transition focus:border-[#005A76] focus:bg-white"
+                  className="h-10 w-full min-w-64 rounded-md border border-gray-300 bg-white pl-9 pr-3 text-xs font-bold text-slate-600 outline-none transition focus:border-[#005A76] focus:bg-white"
                 />
               </label>
             </div>
@@ -1021,7 +1021,7 @@ export default function EntryReport() {
               </table>
             </div>
 
-            <div className="flex flex-col gap-3 border-t border-slate-100 bg-white px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-col gap-3 border-t border-gray-200 bg-white px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-xs font-semibold text-slate-500">
                 Showing {showingStart}-{showingEnd} of {formatNumber(totalItems)} records
               </p>
