@@ -12,6 +12,21 @@ function toPublicUser(user) {
   return rest;
 }
 
+// `permissions` is a Prisma Json column now (see schema.prisma), so it should
+// be stored as a plain object, not a stringified blob. Accept either shape
+// from the client (Staff.jsx sends an object) and normalize.
+function normalizePermissions(permissions) {
+  if (permissions === null) return null;
+  if (typeof permissions === 'string') {
+    try {
+      return JSON.parse(permissions);
+    } catch {
+      throw ApiError.badRequest('permissions must be valid JSON');
+    }
+  }
+  return permissions;
+}
+
 /** GET /api/users?search=&roleId=&isActive=&page=&limit= */
 const list = asyncHandler(async (req, res) => {
   const { search, roleId, isActive } = req.query;
@@ -42,10 +57,10 @@ const list = asyncHandler(async (req, res) => {
 /** GET /api/users/:id */
 const getOne = asyncHandler(async (req, res) => {
   const id = Number(req.params.id);
-  if(isNaN(id)) throw ApiError.badRequest('Incalid ID format');
+  if (isNaN(id)) throw ApiError.badRequest('Invalid ID format');
   
   const user = await prisma.users.findUnique({
-    where: { user_id: Number(req.params.id) },
+    where: { user_id: id },
     include: { roles: true },
   });
   if (!user) throw ApiError.notFound('User not found');
@@ -54,7 +69,7 @@ const getOne = asyncHandler(async (req, res) => {
 
 /** POST /api/users - Admin creates a staff (Admin/Librarian) account */
 const create = asyncHandler(async (req, res) => {
-  const { firstName, lastName, email, phone, password, roleId, isActive } = req.body;
+  const { firstName, lastName, email, phone, password, roleId, isActive, permissions } = req.body;
   if (!firstName || !lastName || !email || !password || !roleId) {
     throw ApiError.badRequest('firstName, lastName, email, password and roleId are required');
   }
@@ -69,6 +84,7 @@ const create = asyncHandler(async (req, res) => {
       hash_password,
       role_id: Number(roleId),
       is_active: isActive !== undefined ? Boolean(isActive) : true,
+      ...(permissions !== undefined ? { permissions: normalizePermissions(permissions) } : {}),
     },
     include: { roles: true },
   });
@@ -80,9 +96,9 @@ const create = asyncHandler(async (req, res) => {
 /** PUT /api/users/:id */
 const update = asyncHandler(async (req, res) => {
   const id = Number(req.params.id);
-if(isNaN(id)) throw ApiError.badRequest('Invalid ID format');
+  if (isNaN(id)) throw ApiError.badRequest('Invalid ID format');
 
-  const { firstName, lastName, email, phone, roleId, isActive, password } = req.body;
+  const { firstName, lastName, email, phone, roleId, isActive, password, permissions } = req.body;
 
   const data = {
     ...(firstName !== undefined ? { first_name: firstName } : {}),
@@ -91,6 +107,7 @@ if(isNaN(id)) throw ApiError.badRequest('Invalid ID format');
     ...(phone !== undefined ? { phone_number: phone } : {}),
     ...(roleId !== undefined ? { role_id: Number(roleId) } : {}),
     ...(isActive !== undefined ? { is_active: Boolean(isActive) } : {}),
+    ...(permissions !== undefined ? { permissions: normalizePermissions(permissions) } : {}),
   };
 
   if (password) {
@@ -106,7 +123,7 @@ if(isNaN(id)) throw ApiError.badRequest('Invalid ID format');
 /** PATCH /api/users/:id/status  Body: { isActive } - deactivate instead of hard delete */
 const setActive = asyncHandler(async (req, res) => {
   const id = Number(req.params.id);
-if(isNaN(id)) throw ApiError.badRequest('Invalid ID format');
+  if (isNaN(id)) throw ApiError.badRequest('Invalid ID format');
 
   const { isActive } = req.body;
   if (isActive === undefined) throw ApiError.badRequest('isActive is required');
@@ -132,7 +149,7 @@ if(isNaN(id)) throw ApiError.badRequest('Invalid ID format');
  */
 const remove = asyncHandler(async (req, res) => {
   const id = Number(req.params.id);
-  if(isNaN(id)) throw ApiError.badRequest('Invalid ID format');
+  if (isNaN(id)) throw ApiError.badRequest('Invalid ID format');
 
   await prisma.users.delete({ where: { user_id: id } });
   await logAction({ userId: req.user?.userId, action: 'DELETE', tableName: 'users', recordId: id, req });

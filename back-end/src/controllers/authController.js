@@ -15,6 +15,8 @@ function signToken(user) {
       email: user.email,
       roleId: user.role_id,
       roleName: user.roles ? user.roles.role_name : null,
+      // `permissions` is a Prisma Json column, already a plain object (or null).
+      permissions: user.permissions || null,
     },
     env.jwtSecret,
     { expiresIn: env.jwtExpiresIn }

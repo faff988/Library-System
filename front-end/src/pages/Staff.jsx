@@ -26,12 +26,25 @@ const ROLE_COLORS = [
   { bg: "#F1F5F9", text: "#334155" },
 ];
 
+const MODULES = [
+  { id: "inventory", label: "Inventory / Books" },
+  { id: "borrow_return", label: "Borrow & Return" },
+  { id: "members", label: "Member Management" },
+  { id: "donations", label: "Donations Log" },
+  { id: "reports", label: "Reports & Analytics" },
+];
+
+const DEFAULT_PERMISSIONS = MODULES.reduce((acc, mod) => {
+  acc[mod.id] = { create: false, read: true, update: false, delete: false };
+  return acc;
+}, {});
+
 const SORT_OPTIONS = ["Newest to Oldest", "Oldest to Newest", "Name A-Z", "Name Z-A", "Admins First"];
 const STATUSES     = ["All Status", "Active", "Inactive"];
 const PAGE_SIZE    = 6;
 
-const inputCls = "w-full border-2 border-gray-300 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#055E83] transition text-gray-800 placeholder:text-gray-400";
-const inputWithIconCls = "w-full border-2 border-gray-300 rounded-lg pl-9 pr-3 py-2.5 text-sm outline-none focus:border-[#055E83] transition text-gray-800 placeholder:text-gray-400";
+const inputCls = "w-full border-2 border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-[#055E83] transition text-gray-800 placeholder:text-gray-400";
+const inputWithIconCls = "w-full border-2 border-gray-300 rounded-lg pl-9 pr-3 py-2 text-sm outline-none focus:border-[#055E83] transition text-gray-800 placeholder:text-gray-400";
 const filterPillCls = "flex items-center gap-2 bg-white border-2 border-gray-300 rounded-lg px-3 py-2";
 
 const getInitials = (name) => (name || "?").split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase();
@@ -48,11 +61,18 @@ const tableGridStyle = {
   paddingRight: "1.5rem",
 };
 
-// Maps from the `users` table (there is no dedicated `staff` table in the
-// schema) joined with `roles`. Adjust field names if your API response
-// shape differs.
 function mapStaff(u) {
   const year = u.created_at ? new Date(u.created_at).getFullYear() : new Date().getFullYear();
+  let parsedPermissions = DEFAULT_PERMISSIONS;
+  
+  if (u.permissions) {
+    try {
+      parsedPermissions = typeof u.permissions === "string" ? JSON.parse(u.permissions) : u.permissions;
+    } catch (e) {
+      console.error("Failed to parse user permissions", e);
+    }
+  }
+
   return {
     dbId: u.user_id,
     id: `STF-${year}-${String(u.user_id).padStart(4, "0")}`,
@@ -64,15 +84,15 @@ function mapStaff(u) {
     roleId: u.role_id ?? "",
     role: u.roles?.role_name || "Unassigned",
     isActive: u.is_active !== false,
+    permissions: parsedPermissions,
     joined: u.created_at ? new Date(u.created_at).toLocaleString("en-US", { month: "short", year: "numeric" }) : "—",
     joinedRaw: u.created_at || null,
   };
 }
 
-// Shared form components
 function Label({ children, required }) {
   return (
-    <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5 block">
+    <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 block">
       {children} {required && <span className="text-red-400">*</span>}
     </label>
   );
@@ -97,11 +117,6 @@ function SelectInput({ children, icon: Icon = ChevronDown, colorCls = "text-gray
 }
 
 // ── Profile Modal ─────────────────────────────────────────────────────────────
-// Renders straight from the row data already loaded by the list call
-// (GET /users/:id only returns the same user+roles shape, nothing extra),
-// so there's no separate fetch here. If you later want real activity
-// numbers, GET /system-logs supports a userId-style filter you could
-// query here and swap back in a stats/activity section.
 function ProfileModal({ staff, onClose, onEdit }) {
   const avatarColor = getAvatarColor(staff.name);
   const admin = isAdminRole(staff.role);
@@ -162,10 +177,11 @@ function ProfileModal({ staff, onClose, onEdit }) {
   );
 }
 
-// ── Add / Edit Modal ──────────────────────────────────────────────────────────
+// ── Add / Edit Modal with CRUD Permissions ─────────────────────────────────────
 const makeEmptyForm = () => ({
   firstName: "", lastName: "", phone: "", email: "",
   password: "", roleId: "", isActive: true,
+  permissions: DEFAULT_PERMISSIONS,
 });
 
 function StaffModal({ staff, roles, saving, onClose, onSave }) {
@@ -179,10 +195,25 @@ function StaffModal({ staff, roles, saving, onClose, onSave }) {
       password: "",
       roleId: staff.roleId || "",
       isActive: staff.isActive,
+      permissions: staff.permissions || DEFAULT_PERMISSIONS,
     } : makeEmptyForm()
   );
-  const set   = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+
+  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
   const reset = () => setForm(makeEmptyForm());
+
+  const handlePermissionToggle = (moduleId, action) => {
+    setForm((prev) => ({
+      ...prev,
+      permissions: {
+        ...prev.permissions,
+        [moduleId]: {
+          ...(prev.permissions[moduleId] || { create: false, read: true, update: false, delete: false }),
+          [action]: !prev.permissions[moduleId]?.[action],
+        },
+      },
+    }));
+  };
 
   const handleSave = () => {
     if (!form.firstName.trim() || !form.lastName.trim() || !form.email.trim()) {
@@ -207,43 +238,45 @@ function StaffModal({ staff, roles, saving, onClose, onSave }) {
       <div className="bg-white w-full max-w-4xl rounded-2xl shadow-2xl overflow-hidden max-h-[92vh] flex flex-col border-2 border-gray-400">
         <div className="px-8 py-5 border-b-2 border-gray-200 flex items-center justify-between flex-shrink-0">
           <div>
-            <h2 className="text-xl font-bold text-[#055E83]">Staff Information</h2>
+            <h2 className="text-xl font-bold text-[#055E83]">{isEdit ? "Edit Staff & Permissions" : "New Staff Account"}</h2>
             <p className="text-xs text-red-400 font-medium mt-0.5">* Required fields</p>
           </div>
           <button onClick={onClose} className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-50 rounded-full transition"><X size={20} /></button>
         </div>
-        <div className="p-8 overflow-y-auto flex-1">
-          <div className="flex gap-10">
+
+        <div className="p-8 overflow-y-auto flex-1 space-y-6">
+          {/* User Details */}
+          <div className="flex gap-8">
             <div className="flex flex-col items-center flex-shrink-0">
               <div className="relative">
-                <div className="w-32 h-32 bg-[#EBF4F8] rounded-full flex items-center justify-center border-4 border-white shadow-md">
-                  <User size={52} className="text-[#055E83]/25" />
+                <div className="w-28 h-28 bg-[#EBF4F8] rounded-full flex items-center justify-center border-4 border-white shadow-md">
+                  <User size={48} className="text-[#055E83]/25" />
                 </div>
-                <button className="absolute bottom-1 right-1 p-2 bg-[#055E83] text-white rounded-full shadow-lg hover:opacity-90 transition"><Camera size={14} /></button>
+                <button className="absolute bottom-0 right-0 p-2 bg-[#055E83] text-white rounded-full shadow-lg hover:opacity-90 transition"><Camera size={13} /></button>
               </div>
-              <button className="mt-4 flex items-center gap-1.5 bg-[#055E83] text-white px-4 py-1.5 rounded-lg text-xs font-bold hover:opacity-90 transition shadow-sm"><Camera size={12} /> Upload Photo</button>
-              <p className="text-[10px] text-gray-400 mt-1">JPG, PNG up to 2MB</p>
+              <button className="mt-3 flex items-center gap-1 bg-[#055E83] text-white px-3 py-1 rounded-lg text-xs font-bold hover:opacity-90 transition shadow-sm"><Camera size={11} /> Upload</button>
             </div>
-            <div className="flex-1 grid grid-cols-3 gap-x-5 gap-y-4">
+
+            <div className="flex-1 grid grid-cols-3 gap-x-4 gap-y-3">
               <div>
                 <Label required>First Name</Label>
-                <input type="text" value={form.firstName} onChange={(e) => set("firstName", e.target.value)} placeholder="Enter first name" className={inputCls} />
+                <input type="text" value={form.firstName} onChange={(e) => set("firstName", e.target.value)} placeholder="First name" className={inputCls} />
               </div>
               <div>
                 <Label required>Last Name</Label>
-                <input type="text" value={form.lastName} onChange={(e) => set("lastName", e.target.value)} placeholder="Enter last name" className={inputCls} />
+                <input type="text" value={form.lastName} onChange={(e) => set("lastName", e.target.value)} placeholder="Last name" className={inputCls} />
               </div>
               <div>
                 <Label required>Email Address</Label>
-                <IconInput icon={Mail} type="email" value={form.email} onChange={(e) => set("email", e.target.value)} placeholder="example@email.com" />
+                <IconInput icon={Mail} type="email" value={form.email} onChange={(e) => set("email", e.target.value)} placeholder="email@domain.com" />
               </div>
               <div>
                 <Label>Phone Number</Label>
-                <IconInput icon={Phone} type="text" value={form.phone} onChange={(e) => set("phone", e.target.value)} placeholder="+855 XX XXX XXXX" />
+                <IconInput icon={Phone} type="text" value={form.phone} onChange={(e) => set("phone", e.target.value)} placeholder="+855 XX XXX XXX" />
               </div>
               <div>
                 <Label required={!isEdit}>{isEdit ? "New Password" : "Password"}</Label>
-                <IconInput icon={Lock} type="password" value={form.password} onChange={(e) => set("password", e.target.value)} placeholder={isEdit ? "Leave blank to keep current" : "Set a password"} />
+                <IconInput icon={Lock} type="password" value={form.password} onChange={(e) => set("password", e.target.value)} placeholder={isEdit ? "Keep blank to retain" : "Set password"} />
               </div>
               <div>
                 <Label required>Role</Label>
@@ -265,8 +298,47 @@ function StaffModal({ staff, roles, saving, onClose, onSave }) {
               )}
             </div>
           </div>
+
+          <hr className="border-gray-200" />
+
+          {/* Module Access Control (CRUD Matrix) */}
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <ShieldCheck size={18} className="text-[#055E83]" />
+              <h3 className="text-sm font-bold text-gray-800">Module Permissions (CRUD Options)</h3>
+            </div>
+
+            <div className="border-2 border-gray-300 rounded-xl overflow-hidden bg-white shadow-sm">
+              <div className="grid grid-cols-5 bg-gray-100 px-4 py-2.5 text-xs font-bold text-gray-600 border-b border-gray-200">
+                <span>Module Name</span>
+                <span className="text-center">Create</span>
+                <span className="text-center">Read / View</span>
+                <span className="text-center">Update / Edit</span>
+                <span className="text-center">Delete</span>
+              </div>
+
+              <div className="divide-y divide-gray-100">
+                {MODULES.map((mod) => (
+                  <div key={mod.id} className="grid grid-cols-5 px-4 py-2.5 items-center hover:bg-slate-50 transition">
+                    <span className="text-xs font-semibold text-gray-800">{mod.label}</span>
+                    {["create", "read", "update", "delete"].map((action) => (
+                      <div key={action} className="text-center">
+                        <input
+                          type="checkbox"
+                          checked={form.permissions[mod.id]?.[action] || false}
+                          onChange={() => handlePermissionToggle(mod.id, action)}
+                          className="w-4 h-4 accent-[#055E83] rounded cursor-pointer"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
         </div>
-        <div className="px-8 py-4 border-t-2 border-gray-200 flex justify-end gap-3 flex-shrink-0">
+
+        <div className="px-8 py-4 border-t-2 border-gray-200 flex justify-end gap-3 flex-shrink-0 bg-gray-50">
           <button onClick={onClose} className="px-6 py-2.5 bg-white border-2 border-gray-300 text-gray-600 rounded-xl text-sm font-bold hover:bg-gray-50 transition">Cancel</button>
           <button onClick={reset} className="flex items-center gap-2 px-6 py-2.5 bg-white border-2 border-gray-300 text-gray-600 rounded-xl text-sm font-bold hover:bg-gray-50 transition"><RotateCcw size={14} /> Reset</button>
           <button disabled={saving} onClick={handleSave} className="flex items-center gap-2 bg-[#E8C110] text-[#055E83] px-6 py-2.5 rounded-xl text-sm font-bold hover:opacity-90 transition shadow-md disabled:opacity-60">
@@ -332,11 +404,6 @@ export default function Staff() {
   const fetchStaff = async () => {
     try {
       setLoading(true);
-      // limit=500 stands in for "fetch everything" so the existing client-side
-      // sort/filter/paginate below keeps working. Move to server-side paging
-      // (page/limit params) if the staff count grows.
-      // "Staff" here is really the `users` table (GET /api/users) — there is
-      // no separate /staff route in the backend.
       const response = await api.get("/users?limit=500");
       if (response.data?.success) {
         setStaffList(response.data.data.map(mapStaff));
@@ -370,7 +437,7 @@ export default function Staff() {
       if (sortBy === "Name Z-A") return b.name.localeCompare(a.name);
       if (sortBy === "Oldest to Newest") return a.dbId - b.dbId;
       if (sortBy === "Admins First") return isAdminRole(b.role) - isAdminRole(a.role);
-      return b.dbId - a.dbId; // Newest to Oldest
+      return b.dbId - a.dbId;
     });
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
@@ -396,6 +463,7 @@ export default function Staff() {
         email: form.email.trim(),
         phone: form.phone.trim() || null,
         roleId: form.roleId,
+        permissions: form.permissions,
         ...(form.password.trim() ? { password: form.password.trim() } : {}),
         ...(modal === "edit" ? { isActive: form.isActive } : {}),
       };
@@ -438,7 +506,7 @@ export default function Staff() {
 
         <div className="px-6 py-5 space-y-4">
 
-          {/* ── Stat Cards ── */}
+          {/* Stat Cards */}
           <div className="grid grid-cols-4 gap-3">
             {[
               { label: "Total Staff", value: total, border: "#055E83" },
@@ -453,7 +521,7 @@ export default function Staff() {
             ))}
           </div>
 
-          {/* ── Filters ── */}
+          {/* Filters */}
           <div className="flex items-center gap-2 flex-wrap">
             <div className={`${filterPillCls} w-72`}>
               <Search size={13} className="text-gray-400 shrink-0" />
@@ -492,7 +560,7 @@ export default function Staff() {
             <p className="ml-auto text-xs text-gray-400">Showing {filtered.length} staff</p>
           </div>
 
-          {/* ── Table ── */}
+          {/* Table */}
           <div className="bg-white rounded-xl border-2 border-gray-300" style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.12)", overflow: "hidden" }}>
 
             <div className="flex items-center justify-between px-5 py-3" style={{ backgroundColor: "#055E83" }}>

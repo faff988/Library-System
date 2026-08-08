@@ -3,7 +3,7 @@ const ApiError = require('../utils/ApiError');
 const asyncHandler = require('../utils/asyncHandler');
 const logAction = require('../utils/logAction');
 const notify = require('../utils/notify');
-const { getPagination, buildMeta } = require('../utils/pagination');
+const { buildMeta } = require('../utils/pagination');
 
 /**
  * IMPORTANT - this table has two MySQL triggers already doing work for us:
@@ -32,10 +32,15 @@ function serialize(record) {
 /** GET /api/borrow-records?search=&status=&memberId=&bookId=&page=&limit= */
 const list = asyncHandler(async (req, res) => {
   const { search, status, memberId, bookId } = req.query;
-  const { skip, take, page, limit } = getPagination(req.query, 10);
+
+  // Safely parse pagination parameters to prevent Prisma from receiving NaN
+  const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+  const limit = Math.max(1, parseInt(req.query.limit, 10) || 10);
+  const skip = (page - 1) * limit;
+  const take = limit;
 
   const where = {
-    ...(status && status !== 'All Transactions' ? { status } : {}),
+    ...(status && status !== 'All Transactions' && status !== 'All' ? { status } : {}),
     ...(memberId ? { member_id: Number(memberId) } : {}),
     ...(bookId ? { book_id: Number(bookId) } : {}),
     ...(search
@@ -152,12 +157,14 @@ const create = asyncHandler(async (req, res) => {
 
 /**
  * PUT /api/borrow-records/:id/return
- * Only flips status -> 'Returned'. The `after_book_return` trigger handles
- * return_date and restocking available_copies.
+ * Flips status -> 'Returned' and updates return_condition. 
+ * The `after_book_return` trigger handles return_date and restocking available_copies.
  */
 const returnBook = asyncHandler(async (req, res) => {
   const id = Number(req.params.id);
   if (isNaN(id)) throw ApiError.badRequest('Invalid ID format');
+
+  const { condition } = req.body;
 
   const existing = await prisma.borrow_records.findUnique({
     where: { borrow_id: id },
@@ -168,14 +175,17 @@ const returnBook = asyncHandler(async (req, res) => {
 
   const record = await prisma.borrow_records.update({
     where: { borrow_id: id },
-    data: { status: 'Returned' },
+    data: { 
+      status: 'Returned',
+      return_condition: condition || 'Good',
+    },
     include: { members: true, books: true },
   });
 
   // --- AUTOMATIC NOTIFICATION FOR RETURN ---
   await notify({
     title: 'Book Returned',
-    message: `"${existing.books?.title || 'A book'}" was returned by ${existing.members?.full_name || 'a member'}.`,
+    message: `"${existing.books?.title || 'A book'}" was returned by ${existing.members?.full_name || 'a member'}. Condition: ${condition || 'Good'}.`,
   });
 
   await logAction({ userId: req.user?.userId, action: 'RETURN', tableName: 'borrow_records', recordId: id, req });

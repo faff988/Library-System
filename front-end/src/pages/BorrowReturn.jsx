@@ -6,7 +6,7 @@ import {
 import Navbar from "../components/Navbar";
 import api, { ASSET_BASE_URL } from "../utils/api";
 
-//Shared helpers 
+// Shared helpers 
 const statusStyle = {
   Borrowed: { bg: "#E8F5E9", text: "#2E7D32", label: "ACTIVE" },
   Overdue:  { bg: "#FFEBEE", text: "#C62828", label: "OVERDUE" },
@@ -45,16 +45,13 @@ function mapRecord(r) {
     borrowDate: r.borrow_date,
     dueDate: r.due_date,
     returnDate: r.return_date,
+    return_condition: r.return_condition,
     status: effectiveStatus,
     rawStatus: r.status,
   };
 }
 
-// Fuzzy matching (client-side, no dependency) 
-// Standard edit-distance algorithm: counts the fewest single-character
-// insert/delete/substitute operations needed to turn one string into the
-// other. Used below to tolerate small typos instead of requiring an exact
-// substring match.
+// Fuzzy matching helpers
 function levenshteinDistance(a, b) {
   a = a || "";
   b = b || "";
@@ -71,18 +68,15 @@ function levenshteinDistance(a, b) {
     for (let j = 1; j <= n; j++) {
       const cost = a[i - 1] === b[j - 1] ? 0 : 1;
       dp[i][j] = Math.min(
-        dp[i - 1][j] + 1,      // deletion
-        dp[i][j - 1] + 1,      // insertion
-        dp[i - 1][j - 1] + cost // substitution
+        dp[i - 1][j] + 1,
+        dp[i][j - 1] + 1,
+        dp[i - 1][j - 1] + cost
       );
     }
   }
   return dp[m][n];
 }
 
-// Returns 0–1: 1 = exact/substring match, lower = less similar.
-// Checked against the whole field and each individual word, so "sofea"
-// still matches "Sophea Keo" even though it's a typo of just the first word.
 function fuzzyScore(query, target) {
   const q = (query || "").toLowerCase().trim();
   const t = (target || "").toLowerCase().trim();
@@ -100,7 +94,7 @@ function fuzzyScore(query, target) {
   return best;
 }
 
-const FUZZY_THRESHOLD = 0.5; // tolerates roughly 1–2 mistyped characters
+const FUZZY_THRESHOLD = 0.5;
 
 function rankMembers(query, members, limit = 6) {
   if (!query.trim()) return members.slice(0, limit);
@@ -130,7 +124,7 @@ function rankBooks(query, books, limit = 6) {
     .map((x) => x.b);
 }
 
-//Page 1: Transaction List 
+// Page 1: Transaction List 
 function TransactionList({ onNewBorrow, onViewDetails, onReturn, refreshKey }) {
   const [search, setSearch] = useState("");
   const [activeTab, setActiveTab] = useState("All");
@@ -146,7 +140,8 @@ function TransactionList({ onNewBorrow, onViewDetails, onReturn, refreshKey }) {
   const fetchRecords = async () => {
     try {
       setLoading(true);
-      const response = await api.get("/borrow-records?limit=500");
+      // Added page=1 alongside limit=500 to satisfy backend pagination checks
+      const response = await api.get("/borrow-records?page=1&limit=500");
       if (response.data?.success) {
         setRecords(response.data.data.map(mapRecord));
       }
@@ -290,7 +285,7 @@ function TransactionList({ onNewBorrow, onViewDetails, onReturn, refreshKey }) {
   );
 }
 
-//Page 2: New Borrow Transaction 
+// Page 2: New Borrow Transaction 
 function NewBorrow({ onCancel, onSave }) {
   const [allMembers, setAllMembers] = useState([]);
   const [allBooks, setAllBooks] = useState([]);
@@ -319,7 +314,7 @@ function NewBorrow({ onCancel, onSave }) {
   const fetchAllMembers = async () => {
     try {
       setMembersLoading(true);
-      const response = await api.get("/members?limit=500");
+      const response = await api.get("/members?page=1&limit=500");
       if (response.data?.success) setAllMembers(response.data.data);
     } catch (err) {
       console.error("Failed to load member directory:", err);
@@ -331,7 +326,7 @@ function NewBorrow({ onCancel, onSave }) {
   const fetchAllBooks = async () => {
     try {
       setBooksLoading(true);
-      const response = await api.get("/books?limit=500");
+      const response = await api.get("/books?page=1&limit=500");
       if (response.data?.success) setAllBooks(response.data.data);
     } catch (err) {
       console.error("Failed to load book catalog:", err);
@@ -340,8 +335,6 @@ function NewBorrow({ onCancel, onSave }) {
     }
   };
 
-  // Recomputed instantly on every keystroke — no network round-trip, since
-  // the full lists are already cached in memory above.
   const memberResults = useMemo(() => {
     if (selectedMember || !memberFocused) return [];
     return rankMembers(memberQuery, allMembers);
@@ -607,7 +600,7 @@ function NewBorrow({ onCancel, onSave }) {
           </div>
 
           {/* Right Side: Summary */}
-          <div className="space-y-3">
+          <div className="space-y-3 sticky top-6 self-start">
             <div className="bg-white rounded-xl border-2 border-gray-300 p-5" style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.12)" }}>
               <h3 className="text-sm font-bold text-[#055E83] mb-4">Transaction Summary</h3>
               <div className="space-y-3">
@@ -643,10 +636,17 @@ function NewBorrow({ onCancel, onSave }) {
   );
 }
 
-//Page 3: Return Book (Confirm) 
+// Page 3: Return Book (Confirm) 
+const CONDITION_OPTIONS = [
+  { value: "Good", label: "Good", dot: "bg-green-500", border: "border-green-500", bg: "bg-green-50", text: "text-green-700" },
+  { value: "Fair", label: "Fair", dot: "bg-yellow-500", border: "border-yellow-400", bg: "bg-yellow-50", text: "text-yellow-700" },
+  { value: "Damaged", label: "Damaged", dot: "bg-red-500", border: "border-red-400", bg: "bg-red-50", text: "text-red-700" },
+];
+
 function ReturnBook({ transaction, onCancel, onConfirm }) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [condition, setCondition] = useState("Good");
 
   const daysOverdue = transaction.status === "Overdue"
     ? Math.max(0, Math.ceil((new Date() - new Date(transaction.dueDate)) / (1000 * 60 * 60 * 24)))
@@ -656,7 +656,9 @@ function ReturnBook({ transaction, onCancel, onConfirm }) {
     try {
       setSubmitting(true);
       setError("");
-      await api.put(`/borrow-records/${transaction.borrow_id}/return`);
+      await api.put(`/borrow-records/${transaction.borrow_id}/return`, {
+        condition,
+      });
       onConfirm();
     } catch (err) {
       console.error("Failed to process return:", err);
@@ -689,39 +691,74 @@ function ReturnBook({ transaction, onCancel, onConfirm }) {
         )}
 
         <div className="grid grid-cols-[1fr_280px] gap-5 items-start">
-          <div className="bg-white rounded-xl border-2 border-gray-300 p-6" style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.12)" }}>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-bold text-[#055E83]">Borrow Record Details</h3>
-              <span className="text-xs font-bold px-2.5 py-1 rounded-full" style={{ backgroundColor: statusStyle[transaction.status]?.bg, color: statusStyle[transaction.status]?.text }}>
-                {statusStyle[transaction.status]?.label}
-              </span>
+          <div className="space-y-4">
+            <div className="bg-white rounded-xl border-2 border-gray-300 p-6" style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.12)" }}>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-bold text-[#055E83]">Borrow Record Details</h3>
+                <span className="text-xs font-bold px-2.5 py-1 rounded-full" style={{ backgroundColor: statusStyle[transaction.status]?.bg, color: statusStyle[transaction.status]?.text }}>
+                  {statusStyle[transaction.status]?.label}
+                </span>
+              </div>
+              <div className="border-b-2 border-gray-200 mb-5" />
+              <div className="grid grid-cols-2 gap-y-4 gap-x-8">
+                {[
+                  ["Transaction ID", `TXN-${transaction.borrow_id}`],
+                  ["Borrow Date", formatDate(transaction.borrowDate)],
+                  ["Member Name", transaction.member],
+                  ["Due Date", formatDate(transaction.dueDate)],
+                  ["Book Title", transaction.book],
+                  ["Days Overdue", <span className={daysOverdue > 0 ? "text-red-600 font-bold" : "text-green-600 font-bold"}>{daysOverdue} days</span>],
+                ].map(([label, val], i) => (
+                  <div key={i}>
+                    <p className="text-xs text-gray-400 mb-0.5 font-bold uppercase tracking-wider">{label}</p>
+                    <p className="text-sm font-bold text-gray-800">{val}</p>
+                  </div>
+                ))}
+              </div>
+              <p className="text-[11px] text-gray-400 mt-5">
+                Confirming will mark this book as returned and automatically restock it in inventory. To log detailed damage notes or a lost book, use the Damage Reports page after confirming.
+              </p>
             </div>
-            <div className="border-b-2 border-gray-200 mb-5" />
-            <div className="grid grid-cols-2 gap-y-4 gap-x-8">
-              {[
-                ["Transaction ID", `TXN-${transaction.borrow_id}`],
-                ["Borrow Date", formatDate(transaction.borrowDate)],
-                ["Member Name", transaction.member],
-                ["Due Date", formatDate(transaction.dueDate)],
-                ["Book Title", transaction.book],
-                ["Days Overdue", <span className={daysOverdue > 0 ? "text-red-600 font-bold" : "text-green-600 font-bold"}>{daysOverdue} days</span>],
-              ].map(([label, val], i) => (
-                <div key={i}>
-                  <p className="text-xs text-gray-400 mb-0.5 font-bold uppercase tracking-wider">{label}</p>
-                  <p className="text-sm font-bold text-gray-800">{val}</p>
-                </div>
-              ))}
+
+            {/* Book Return Condition */}
+            <div className="bg-white rounded-xl border-2 border-gray-300 p-6" style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.12)" }}>
+              <h3 className="text-sm font-bold text-[#055E83] mb-4">Book Return Condition</h3>
+              <div className="border-b-2 border-gray-200 mb-5" />
+              <div className="grid grid-cols-3 gap-3">
+                {CONDITION_OPTIONS.map((opt) => {
+                  const active = condition === opt.value;
+                  return (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => setCondition(opt.value)}
+                      className={`flex items-center gap-2 rounded-xl border-2 px-4 py-3 text-sm font-semibold transition ${
+                        active ? `${opt.border} ${opt.bg} ${opt.text}` : "border-gray-200 bg-white text-gray-500 hover:bg-gray-50"
+                      }`}
+                    >
+                      <span className={`w-2.5 h-2.5 rounded-full ${active ? opt.dot : "bg-gray-300"}`} />
+                      {opt.label}
+                    </button>
+                  );
+                })}
+              </div>
+              {condition === "Damaged" && (
+                <p className="text-[11px] text-amber-600 mt-3">
+                  Marked as damaged. After confirming, add a full damage report from the Damage Reports page.
+                </p>
+              )}
             </div>
-            <p className="text-[11px] text-gray-400 mt-5">
-              Confirming will mark this book as returned and automatically restock it in inventory. To log damage or a lost book, use the Damage Reports page after confirming.
-            </p>
           </div>
 
           <div className="space-y-3">
             <div className="bg-white rounded-xl border-2 border-gray-300 p-5" style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.12)" }}>
               <h3 className="text-sm font-bold text-[#055E83] mb-4">Return Summary</h3>
               <div className="space-y-3">
-                {[["Return Date", formatDate(new Date())], ["Days Overdue", `${daysOverdue} days`]].map(([label, val]) => (
+                {[
+                  ["Return Date", formatDate(new Date())],
+                  ["Days Overdue", `${daysOverdue} days`],
+                  ["Condition", condition],
+                ].map(([label, val]) => (
                   <div key={label} className="flex justify-between items-baseline border-b border-gray-100 pb-2.5 last:border-0 last:pb-0">
                     <span className="text-xs text-gray-400 font-semibold">{label}</span>
                     <span className="text-xs font-bold text-gray-700">{val}</span>
@@ -746,7 +783,7 @@ function ReturnBook({ transaction, onCancel, onConfirm }) {
   );
 }
 
-//Page 4: Transaction Detail 
+// Page 4: Transaction Detail 
 function ReturnBookDetail({ transactionId, onBack }) {
   const [t, setT] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -902,6 +939,24 @@ function ReturnBookDetail({ transactionId, onBack }) {
                   ["Due Date", formatDate(t.due_date)],
                   ["Return Date", t.return_date ? formatDate(t.return_date) : "Not yet returned"],
                   ["Duration", `${duration} day${duration === 1 ? "" : "s"}`],
+                  ...(t.return_date
+                    ? [
+                        [
+                          "Condition",
+                          <span
+                            className={
+                              t.return_condition === "Damaged"
+                                ? "text-red-600 font-bold"
+                                : t.return_condition === "Fair"
+                                ? "text-yellow-600 font-bold"
+                                : "text-green-600 font-bold"
+                            }
+                          >
+                            {t.return_condition || "—"}
+                          </span>,
+                        ],
+                      ]
+                    : []),
                 ].map(([label, val]) => (
                   <div key={label} className="flex justify-between border-b border-gray-100 pb-2.5 last:border-0 last:pb-0">
                     <span className="text-xs text-gray-400 font-semibold">{label}</span>

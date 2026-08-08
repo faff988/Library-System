@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import Navbar from "../components/Navbar";
 import api from "../utils/api";
+import { useAuth } from "../hooks/useAuth";
 
 const cardShadow = { boxShadow: "0 2px 12px rgba(0,0,0,0.12)" };
 
@@ -361,6 +362,7 @@ function ItemsSection({ items, setItems }) {
 
 // ─── DonationsList ────────────────────────────────────────────────────────
 function DonationsList({ data, loading, drafts, onAdd, onView, onEdit, onDeleteClick, onResumeDraft, onDiscardDraft }) {
+  const { can } = useAuth();
   const [search, setSearch] = useState("");
   const [bookFilter, setBookFilter] = useState("All Records");
   const [currentPage, setCurrentPage] = useState(1);
@@ -448,9 +450,11 @@ function DonationsList({ data, loading, drafts, onAdd, onView, onEdit, onDeleteC
         <div className="bg-white rounded-xl border border-gray-300" style={{ ...cardShadow, overflow: "hidden" }}>
           <div className="flex items-center justify-between px-5 py-3" style={{ backgroundColor: "#055E83" }}>
             <h2 className="text-white font-bold text-sm flex items-center gap-2"><Heart size={15} /> Donation Records</h2>
-            <button onClick={onAdd} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold hover:opacity-90 transition" style={{ backgroundColor: "#E8C110", color: "#055E83" }}>
-              <Plus size={13} /> Add Donation
-            </button>
+            {can("donations", "create") && (
+              <button onClick={onAdd} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold hover:opacity-90 transition" style={{ backgroundColor: "#E8C110", color: "#055E83" }}>
+                <Plus size={13} /> Add Donation
+              </button>
+            )}
           </div>
 
           <div style={{ overflowX: "auto", width: "100%" }}>
@@ -497,8 +501,12 @@ function DonationsList({ data, loading, drafts, onAdd, onView, onEdit, onDeleteC
                       <span className="text-xs text-gray-500 text-center">{formatDate(d.date)}</span>
                       <div className="flex items-center justify-center gap-1.5">
                         <button onClick={() => onView(d)} className="flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-bold bg-[#055E83] text-white hover:opacity-85 transition"><Eye size={12} /> View</button>
-                        <button onClick={() => onEdit(d)} className="flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-bold bg-[#E8C110] text-[#055E83] hover:opacity-85 transition"><Pencil size={12} /> Edit</button>
-                        <button onClick={() => onDeleteClick(d)} className="flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-bold bg-red-50 text-red-500 hover:bg-red-100 transition"><Trash2 size={12} /></button>
+                        {can("donations", "update") && (
+                          <button onClick={() => onEdit(d)} className="flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-bold bg-[#E8C110] text-[#055E83] hover:opacity-85 transition"><Pencil size={12} /> Edit</button>
+                        )}
+                        {can("donations", "delete") && (
+                          <button onClick={() => onDeleteClick(d)} className="flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-bold bg-red-50 text-red-500 hover:bg-red-100 transition"><Trash2 size={12} /></button>
+                        )}
                       </div>
                     </div>
                   );
@@ -683,6 +691,7 @@ function AddDonation({ initialDraft, onCancel, onSave, onSavedDraft }) {
 
 // ─── DonorDetail ─────────────────────────────────────────────────────────
 function DonorDetail({ donation, onEdit, onDeleteClick, onBackToList }) {
+  const { can } = useAuth();
   const [history, setHistory] = useState(null);
 
   useEffect(() => {
@@ -717,12 +726,16 @@ setHistory({
               <Printer size={13} /> Receipt
             </button>
             <div className="w-px h-4 bg-gray-300" />
-            <button onClick={onEdit} className="text-xs font-semibold flex items-center gap-1.5 px-3 py-1.5 rounded-lg hover:opacity-90 transition" style={{ backgroundColor: "#055E83", color: "#fff" }}>
-              <Edit2 size={13} /> Edit
-            </button>
-            <button onClick={() => onDeleteClick(donation)} className="text-xs font-semibold text-red-500 flex items-center gap-1.5 px-3 py-1.5 rounded-lg hover:bg-red-50 transition">
-              <Trash2 size={13} /> Delete
-            </button>
+            {can("donations", "update") && (
+              <button onClick={onEdit} className="text-xs font-semibold flex items-center gap-1.5 px-3 py-1.5 rounded-lg hover:opacity-90 transition" style={{ backgroundColor: "#055E83", color: "#fff" }}>
+                <Edit2 size={13} /> Edit
+              </button>
+            )}
+            {can("donations", "delete") && (
+              <button onClick={() => onDeleteClick(donation)} className="text-xs font-semibold text-red-500 flex items-center gap-1.5 px-3 py-1.5 rounded-lg hover:bg-red-50 transition">
+                <Trash2 size={13} /> Delete
+              </button>
+            )}
           </div>
         </div>
 
@@ -803,6 +816,7 @@ setHistory({
 
 // ─── EditDonation ────────────────────────────────────────────────────────
 function EditDonation({ donation, onCancel, onUpdate }) {
+  const { can } = useAuth();
   const [form, setForm] = useState({
     donor_name: donation.donorName,
     amount: donation.amount != null ? String(donation.amount) : "",
@@ -942,9 +956,11 @@ const refreshItems = async () => {
               <BookOpen size={14} className="text-[#E8C110]" />
               <h3 className="font-bold text-sm">Books Donated ({items.length})</h3>
             </div>
-            <button onClick={() => setDialog("add")} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold hover:opacity-90 transition border border-white/30 text-white bg-white/10">
-              <Plus size={12} /> Add Book
-            </button>
+            {can("donations", "update") && (
+              <button onClick={() => setDialog("add")} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold hover:opacity-90 transition border border-white/30 text-white bg-white/10">
+                <Plus size={12} /> Add Book
+              </button>
+            )}
           </div>
           <div className="p-6">
             {items.length === 0 ? (
@@ -958,12 +974,16 @@ const refreshItems = async () => {
                       <p className="text-xs text-gray-400 mt-0.5">{it.author} · Dewey: {it.deweyCode}{it.section ? ` · ${it.section}` : ""}</p>
                     </div>
                     <div className="flex items-center gap-2 shrink-0 ml-3">
-                      <button onClick={() => setDialog(it)} className="p-1.5 text-gray-400 hover:text-[#055E83] transition">
-                        <Pencil size={13} />
-                      </button>
-                      <button onClick={() => handleRemoveItem(it)} className="p-1.5 text-gray-400 hover:text-red-500 transition">
-                        <Trash2 size={13} />
-                      </button>
+                      {can("donations", "update") && (
+                        <button onClick={() => setDialog(it)} className="p-1.5 text-gray-400 hover:text-[#055E83] transition">
+                          <Pencil size={13} />
+                        </button>
+                      )}
+                      {can("donations", "delete") && (
+                        <button onClick={() => handleRemoveItem(it)} className="p-1.5 text-gray-400 hover:text-red-500 transition">
+                          <Trash2 size={13} />
+                        </button>
+                      )}
                     </div>
                   </div>
                 ))}

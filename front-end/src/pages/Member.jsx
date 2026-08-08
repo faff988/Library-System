@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import Navbar from "../components/Navbar";
 import api from "../utils/api";
+import { useAuth } from "../hooks/useAuth";
 import {
   Users, BookOpen, UserPlus, ChevronLeft, ChevronRight, Edit3, Trash2,
   ChevronDown, Crown, Star, X, Save, Check, Camera, Phone, Mail, MapPin,
@@ -134,7 +135,7 @@ function SelectInput({ children, icon: Icon = ChevronDown, colorCls = "text-gray
 
 // ── Profile Modal ─────────────────────────────────────────────────────────────
 function ProfileModal({ member, onClose, onEdit }) {
-
+  const { can } = useAuth();
   const [active, setActive] = useState([]);
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -315,9 +316,11 @@ function ProfileModal({ member, onClose, onEdit }) {
 
         <div className="px-8 py-4 border-t-2 border-gray-200 bg-gray-50 flex justify-end gap-3 flex-shrink-0">
           <button onClick={onClose} className="px-6 py-2.5 bg-white border-2 border-gray-300 text-gray-600 rounded-xl text-sm font-bold hover:bg-gray-50 transition">Close</button>
-          <button onClick={onEdit} className="flex items-center gap-2 bg-[#055E83] text-white px-6 py-2.5 rounded-xl text-sm font-bold hover:opacity-90 transition shadow-sm">
-            <Edit3 size={14} /> Edit Profile
-          </button>
+          {can("members", "update") && (
+            <button onClick={onEdit} className="flex items-center gap-2 bg-[#055E83] text-white px-6 py-2.5 rounded-xl text-sm font-bold hover:opacity-90 transition shadow-sm">
+              <Edit3 size={14} /> Edit Profile
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -461,6 +464,7 @@ function DeleteModal({ member, deleting, onClose, onConfirm }) {
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function Member() {
+  const { can } = useAuth();
   const [members,    setMembers]  = useState([]);
   const [membershipTypes, setMembershipTypes] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -648,11 +652,13 @@ export default function Member() {
               <h2 className="text-white font-bold text-sm flex items-center gap-2">
                 <Users size={15} /> Member List
               </h2>
-              <button onClick={openAdd}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold hover:opacity-90 transition"
-                style={{ backgroundColor: "#E8C110", color: "#055E83" }}>
-                <UserPlus size={13} /> Add New Member
-              </button>
+              {can("members", "create") && (
+                <button onClick={openAdd}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold hover:opacity-90 transition"
+                  style={{ backgroundColor: "#E8C110", color: "#055E83" }}>
+                  <UserPlus size={13} /> Add New Member
+                </button>
+              )}
             </div>
 
             <div style={{ overflowX: "auto", width: "100%" }}>
@@ -711,15 +717,19 @@ export default function Member() {
                             style={{ backgroundColor: "#055E83", color: "#fff" }}>
                             <Eye size={12} /> View
                           </button>
-                          <button onClick={(e) => { e.stopPropagation(); openEdit(m); }}
-                            className="flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-bold hover:opacity-85 transition shadow-sm"
-                            style={{ backgroundColor: "#E8C110", color: "#055E83" }}>
-                            <Edit3 size={12} /> Edit
-                          </button>
-                          <button onClick={(e) => { e.stopPropagation(); openDelete(m); }}
-                            className="flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs font-bold hover:opacity-85 transition shadow-sm bg-red-50 text-red-500 border border-red-100">
-                            <Trash2 size={12} />
-                          </button>
+                          {can("members", "update") && (
+                            <button onClick={(e) => { e.stopPropagation(); openEdit(m); }}
+                              className="flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-bold hover:opacity-85 transition shadow-sm"
+                              style={{ backgroundColor: "#E8C110", color: "#055E83" }}>
+                              <Edit3 size={12} /> Edit
+                            </button>
+                          )}
+                          {can("members", "delete") && (
+                            <button onClick={(e) => { e.stopPropagation(); openDelete(m); }}
+                              className="flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs font-bold hover:opacity-85 transition shadow-sm bg-red-50 text-red-500 border border-red-100">
+                              <Trash2 size={12} />
+                            </button>
+                          )}
                         </div>
                       </div>
                     );

@@ -28,18 +28,19 @@ model books {
 }
 
 model borrow_records {
-  borrow_id      Int                    @id @default(autoincrement())
-  member_id      Int
-  book_id        Int
-  issued_by      Int
-  borrow_date    DateTime               @default(now()) @db.Timestamp(0)
-  due_date       DateTime               @db.Date
-  return_date    DateTime?              @db.Timestamp(0)
-  status         borrow_records_status? @default(Borrowed)
-  members        members                @relation(fields: [member_id], references: [member_id], onUpdate: Restrict, map: "borrow_records_ibfk_1")
-  books          books                  @relation(fields: [book_id], references: [book_id], onUpdate: Restrict, map: "borrow_records_ibfk_2")
-  users          users                  @relation(fields: [issued_by], references: [user_id], onUpdate: Restrict, map: "borrow_records_ibfk_3")
-  damage_reports damage_reports[]
+  borrow_id        Int                              @id @default(autoincrement())
+  member_id        Int
+  book_id          Int
+  issued_by        Int
+  borrow_date      DateTime                         @default(now()) @db.Timestamp(0)
+  due_date         DateTime                         @db.Date
+  return_date      DateTime?                        @db.Timestamp(0)
+  return_condition borrow_records_return_condition?
+  status           borrow_records_status?           @default(Borrowed)
+  members          members                          @relation(fields: [member_id], references: [member_id], onUpdate: Restrict, map: "borrow_records_ibfk_1")
+  books            books                            @relation(fields: [book_id], references: [book_id], onUpdate: Restrict, map: "borrow_records_ibfk_2")
+  users            users                            @relation(fields: [issued_by], references: [user_id], onUpdate: Restrict, map: "borrow_records_ibfk_3")
+  damage_reports   damage_reports[]
 
   @@index([book_id], map: "book_id")
   @@index([issued_by], map: "issued_by")
@@ -120,6 +121,7 @@ model library_entries {
   purpose       library_entries_purpose?
   entry_time    DateTime                 @default(now()) @db.Timestamp(0)
 }
+
 model library_settings {
   setting_id           Int      @id @default(1)
   max_books_per_member Int      @default(2)
@@ -164,9 +166,10 @@ model notifications {
 }
 
 model roles {
-  role_id   Int     @id @default(autoincrement())
-  role_name String  @unique(map: "role_name") @db.VarChar(50)
-  users     users[]
+  role_id     Int     @id @default(autoincrement())
+  role_name   String  @unique(map: "role_name") @db.VarChar(50)
+  permissions String  @db.LongText
+  users       users[]
 }
 
 model system_logs {
@@ -184,20 +187,22 @@ model system_logs {
 }
 
 model users {
-  user_id        Int              @id @default(autoincrement())
-  first_name     String           @db.VarChar(50)
-  last_name      String           @db.VarChar(50)
-  email          String           @unique(map: "email") @db.VarChar(100)
-  phone_number   String?          @db.VarChar(15)
-  hash_password  String           @db.VarChar(255)
-  role_id        Int?
-  created_at     DateTime         @default(now()) @db.Timestamp(0)
-  is_active      Boolean?         @default(true)
-  borrow_records borrow_records[]
-  damage_reports damage_reports[]
-  donations      donations[]
-  system_logs    system_logs[]
-  roles          roles?           @relation(fields: [role_id], references: [role_id], onDelete: Restrict, onUpdate: Restrict, map: "users_ibfk_1")
+  user_id              Int              @id @default(autoincrement())
+  first_name           String           @db.VarChar(50)
+  last_name            String           @db.VarChar(50)
+  email                String           @unique(map: "email") @db.VarChar(100)
+  phone_number         String?          @db.VarChar(15)
+  hash_password        String           @db.VarChar(255)
+  role_id              Int?
+  created_at           DateTime         @default(now()) @db.Timestamp(0)
+  is_active            Boolean?         @default(true)
+  permissions          String?          @db.LongText
+  permission_overrides String?          @db.LongText
+  borrow_records       borrow_records[]
+  damage_reports       damage_reports[]
+  donations            donations[]
+  system_logs          system_logs[]
+  roles                roles?           @relation(fields: [role_id], references: [role_id], onDelete: Restrict, onUpdate: Restrict, map: "users_ibfk_1")
 
   @@index([role_id], map: "role_id")
 }
@@ -256,4 +261,10 @@ enum damage_reports_book_condition {
   Fair
   Damaged
   Lost
+}
+
+enum borrow_records_return_condition {
+  Good
+  Fair
+  Damaged
 }

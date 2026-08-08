@@ -60,10 +60,24 @@ export function useAuth() {
     setUser(null);
   }, []);
 
+  // `can('inventory', 'delete')` — Admins always pass. Everyone else needs
+  // an explicit true on that module+action in their token's `permissions`.
+  // Fails closed: no entry = no access, matching the backend middleware.
+  const can = useCallback(
+    (moduleId, action) => {
+      if (!user) return false;
+      if ((user.roleName || "").toLowerCase() === "admin") return true;
+      return !!user.permissions?.[moduleId]?.[action];
+    },
+    [user]
+  );
+
   return {
     user,
     role: user?.roleName ?? null,
+    permissions: user?.permissions ?? null,
     isAuthenticated: !!user,
+    can,
     login,
     logout,
   };

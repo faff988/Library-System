@@ -7,6 +7,7 @@ import {
 import { useNavigate, useParams } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import api, { ASSET_BASE_URL } from "../utils/api";
+import { useAuth } from "../hooks/useAuth";
 
 const LANGUAGES = ["All Languages", "Khmer", "English", "French"];
 const CATEGORIES = [
@@ -135,6 +136,7 @@ const PAGE_SIZE = 10; // matches booksController.js's own default limit
 
 export function Inventory() {
   const navigate = useNavigate();
+  const { can } = useAuth();
   const [view, setView] = useState("list");
   const [books, setBooks] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -278,9 +280,11 @@ export function Inventory() {
             <div className="bg-white rounded-xl overflow-hidden border-2 border-gray-300" style={cardShadow}>
               <div className="flex items-center justify-between px-5 py-3.5" style={{ backgroundColor: HEAD_COLOR }}>
                 <h2 className="text-white font-bold text-sm flex items-center gap-2"><Library size={15} /> Book Catalog</h2>
-                <button onClick={() => navigate("/inventory/add")} className="flex items-center gap-1.5 px-4 py-1.5 rounded-md text-xs font-bold transition hover:opacity-95 bg-[#E8C110] text-[#1B4965]">
-                  <Plus size={12} /> Add Book
-                </button>
+                {can("inventory", "create") && (
+                  <button onClick={() => navigate("/inventory/add")} className="flex items-center gap-1.5 px-4 py-1.5 rounded-md text-xs font-bold transition hover:opacity-95 bg-[#E8C110] text-[#1B4965]">
+                    <Plus size={12} /> Add Book
+                  </button>
+                )}
               </div>
 
               <div className="overflow-x-auto w-full">
@@ -308,8 +312,12 @@ export function Inventory() {
                       <div className="text-center"><StatusBadge status={book.status} /></div>
                       <div className="flex justify-center gap-1.5">
                         <button onClick={() => navigate(`/inventory/${book.book_id}`)} className="px-2.5 py-1.5 rounded bg-[#055E83] text-white"><Eye size={12} /></button>
-                        <button onClick={() => navigate(`/inventory/${book.book_id}/edit`)} className="px-2.5 py-1.5 rounded bg-[#E8C110] text-[#1B4965]"><Edit2 size={12} /></button>
-                        <button onClick={(e) => openDeleteProcess(book, e)} className="px-2.5 py-1.5 rounded bg-red-50 text-red-500 border border-red-100"><Trash2 size={12} /></button>
+                        {can("inventory", "update") && (
+                          <button onClick={() => navigate(`/inventory/${book.book_id}/edit`)} className="px-2.5 py-1.5 rounded bg-[#E8C110] text-[#1B4965]"><Edit2 size={12} /></button>
+                        )}
+                        {can("inventory", "delete") && (
+                          <button onClick={(e) => openDeleteProcess(book, e)} className="px-2.5 py-1.5 rounded bg-red-50 text-red-500 border border-red-100"><Trash2 size={12} /></button>
+                        )}
                       </div>
                     </div>
                   )) : <div className="p-10 text-center text-gray-400">No books found matching your criteria.</div>}
@@ -415,6 +423,7 @@ export function AddBook({ onCancel }) {
   const [loading, setLoading] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const navigate = useNavigate();
+  const { can } = useAuth();
 
   const [sectionSuggestions, setSectionSuggestions] = useState([]);
   const [coverFile, setCoverFile] = useState(null);
@@ -425,6 +434,12 @@ export function AddBook({ onCancel }) {
       .then((res) => { if (res.data?.success) setSectionSuggestions(res.data.data); })
       .catch((err) => console.error("Failed to load section suggestions:", err));
   }, []);
+
+  // Guards against a librarian without inventory.create hitting this route
+  // directly by URL — the button is already hidden, this covers the gap.
+  useEffect(() => {
+    if (!can("inventory", "create")) navigate("/inventory", { replace: true });
+  }, [can, navigate]);
 
   const handleClose = () => {
     if (typeof onCancel === "function") {
@@ -675,6 +690,7 @@ export function AddBook({ onCancel }) {
 
 export function BookDetails() {
   const navigate = useNavigate();
+  const { can } = useAuth();
   const { id } = useParams();
   const [book, setBook] = useState(null);
   const [history, setHistory] = useState([]);
@@ -754,20 +770,24 @@ export function BookDetails() {
             </button>
 
             <div className="flex items-center gap-2">
-              <button
-                onClick={() => navigate(`/inventory/${book.book_id}/edit`)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-bold text-white hover:opacity-85 transition shadow-sm"
-                style={{ backgroundColor: HEAD_COLOR }}
-              >
-                <Edit2 size={12} /> Edit Book
-              </button>
-              <button
-                type="button"
-                onClick={() => setIsDeleteOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-bold hover:opacity-85 transition shadow-sm bg-red-50 text-red-500 border-2 border-red-100"
-              >
-                <Trash2 size={12} /> Delete Book
-              </button>
+              {can("inventory", "update") && (
+                <button
+                  onClick={() => navigate(`/inventory/${book.book_id}/edit`)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-bold text-white hover:opacity-85 transition shadow-sm"
+                  style={{ backgroundColor: HEAD_COLOR }}
+                >
+                  <Edit2 size={12} /> Edit Book
+                </button>
+              )}
+              {can("inventory", "delete") && (
+                <button
+                  type="button"
+                  onClick={() => setIsDeleteOpen(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-bold hover:opacity-85 transition shadow-sm bg-red-50 text-red-500 border-2 border-red-100"
+                >
+                  <Trash2 size={12} /> Delete Book
+                </button>
+              )}
             </div>
           </div>
 
@@ -885,7 +905,12 @@ export function BookDetails() {
 // ─── EDIT BOOK ────────────────────────────────────────────────────────────────
 export function EditBook() {
   const navigate = useNavigate();
+  const { can } = useAuth();
   const { id } = useParams();
+
+  useEffect(() => {
+    if (!can("inventory", "update")) navigate("/inventory", { replace: true });
+  }, [can, navigate]);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
