@@ -32,12 +32,26 @@ const MODULES = [
   { id: "members", label: "Member Management" },
   { id: "donations", label: "Donations Log" },
   { id: "reports", label: "Reports & Analytics" },
+  { id: "feedback", label: "Feedback" },
 ];
 
 const DEFAULT_PERMISSIONS = MODULES.reduce((acc, mod) => {
   acc[mod.id] = { create: false, read: true, update: false, delete: false };
   return acc;
 }, {});
+
+// Read access isn't staff-configurable — every logged-in staff member can
+// view every module, so `read` is always true on save regardless of what a
+// legacy record has stored (e.g. from before this was locked down).
+function withReadAlwaysTrue(permissions) {
+  const source = permissions || DEFAULT_PERMISSIONS;
+  return Object.fromEntries(
+    MODULES.map((mod) => [
+      mod.id,
+      { ...(source[mod.id] || DEFAULT_PERMISSIONS[mod.id]), read: true },
+    ])
+  );
+}
 
 const SORT_OPTIONS = ["Newest to Oldest", "Oldest to Newest", "Name A-Z", "Name Z-A", "Admins First"];
 const STATUSES     = ["All Status", "Active", "Inactive"];
@@ -195,7 +209,7 @@ function StaffModal({ staff, roles, saving, onClose, onSave }) {
       password: "",
       roleId: staff.roleId || "",
       isActive: staff.isActive,
-      permissions: staff.permissions || DEFAULT_PERMISSIONS,
+      permissions: withReadAlwaysTrue(staff.permissions),
     } : makeEmptyForm()
   );
 
@@ -228,7 +242,7 @@ function StaffModal({ staff, roles, saving, onClose, onSave }) {
       alert("Please select a Role.");
       return;
     }
-    onSave(form);
+    onSave({ ...form, permissions: withReadAlwaysTrue(form.permissions) });
   };
 
   const statusColor = form.isActive ? "text-green-600" : "text-gray-500";
@@ -307,21 +321,21 @@ function StaffModal({ staff, roles, saving, onClose, onSave }) {
               <ShieldCheck size={18} className="text-[#055E83]" />
               <h3 className="text-sm font-bold text-gray-800">Module Permissions (CRUD Options)</h3>
             </div>
+            <p className="text-[11px] text-gray-400 mb-3 -mt-2">All staff can view every module by default. Toggle Create/Update/Delete access per module below.</p>
 
             <div className="border-2 border-gray-300 rounded-xl overflow-hidden bg-white shadow-sm">
-              <div className="grid grid-cols-5 bg-gray-100 px-4 py-2.5 text-xs font-bold text-gray-600 border-b border-gray-200">
+              <div className="grid grid-cols-4 bg-gray-100 px-4 py-2.5 text-xs font-bold text-gray-600 border-b border-gray-200">
                 <span>Module Name</span>
                 <span className="text-center">Create</span>
-                <span className="text-center">Read / View</span>
                 <span className="text-center">Update / Edit</span>
                 <span className="text-center">Delete</span>
               </div>
 
               <div className="divide-y divide-gray-100">
                 {MODULES.map((mod) => (
-                  <div key={mod.id} className="grid grid-cols-5 px-4 py-2.5 items-center hover:bg-slate-50 transition">
+                  <div key={mod.id} className="grid grid-cols-4 px-4 py-2.5 items-center hover:bg-slate-50 transition">
                     <span className="text-xs font-semibold text-gray-800">{mod.label}</span>
-                    {["create", "read", "update", "delete"].map((action) => (
+                    {["create", "update", "delete"].map((action) => (
                       <div key={action} className="text-center">
                         <input
                           type="checkbox"

@@ -21,25 +21,20 @@ import {
   DoorOpen,
 } from "lucide-react";
 
-// `module` maps a nav item to the permission key used in Staff.jsx's MODULES
-// and the backend's requirePermission(module, action). Items with no
-// `module` (Dashboard, Staff, Entry, FeedBack, Event) are gated by role
-// only, same as before — the granular CRUD grid doesn't cover them yet.
 const navItems = [
   { label: "Dashboard", icon: LayoutDashboard, path: "/dashboard", roles: ["admin", "librarian"] },
   { label: "Staff", icon: UserCog, path: "/staff", roles: ["admin"] },
   { label: "Entry", icon: DoorOpen, path: "/entry", roles: ["admin", "librarian"]},
-  { label: "Inventory", icon: Library, path: "/inventory", roles: ["admin", "librarian"], module: "inventory" },
-  { label: "Member", icon: Users, path: "/member", roles: ["admin", "librarian"], module: "members" },
-  { label: "Borrow/Return", icon: ArrowLeftRight, path: "/borrow-return", roles: ["admin", "librarian"], module: "borrow_return" },
-  { label: "FeedBack", icon: MessageSquare, path: "/feedback", roles: ["admin", "librarian"] },
+  { label: "Inventory", icon: Library, path: "/inventory", roles: ["admin", "librarian"] },
+  { label: "Member", icon: Users, path: "/member", roles: ["admin", "librarian"] },
+  { label: "Borrow/Return", icon: ArrowLeftRight, path: "/borrow-return", roles: ["admin", "librarian"] },
+  { label: "FeedBack", icon: MessageSquare, path: "/feedback", roles: ["admin", "librarian"], module: "feedback" },
   { label: "Event", icon: CalendarDays, path: "/event", roles: ["admin"] },
-  { label: "Donations", icon: HeartHandshake, path: "/donations", roles: ["admin", "librarian"], module: "donations" },
+  { label: "Donations", icon: HeartHandshake, path: "/donations", roles: ["admin", "librarian"] },
   {
     label: "Reports",
     icon: BarChart2,
     roles: ["admin", "librarian"],
-    module: "reports",
     children: [
       { label: "Entry Report", icon: DoorOpen, path: "/reports/entry-report", roles: ["admin", "librarian"] },
       { label: "Borrow/Return Report", icon: ArrowLeftRight, path: "/reports/borrow-return", roles: ["admin", "librarian"] },
@@ -56,17 +51,14 @@ const navItems = [
 export default function Sidebar() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { role, can } = useAuth();
+  const { role } = useAuth();
   const userRole = role?.toLowerCase() || "librarian";
 
   const [openOverrides, setOpenOverrides] = useState({});
 
-  // Filter items based on role AND (if the item declares a permission
-  // module) whether the user actually has read access to it. Admins pass
-  // the `can` check automatically — see useAuth.js.
+  // Filter items based on user role
   const filteredNavItems = navItems
     .filter((item) => item.roles.includes(userRole))
-    .filter((item) => !item.module || can(item.module, "read"))
     .map((item) => {
       if (item.children) {
         return {

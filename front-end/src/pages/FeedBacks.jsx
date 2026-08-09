@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import Navbar from "../components/Navbar";
 import api from "../utils/api";
+import { useAuth } from "../hooks/useAuth";
 import {
   Star, MessageSquare, ThumbsUp, Search, ChevronDown, Pencil, Trash2,
   ChevronLeft, ChevronRight, Send, Check, AlertTriangle, X, Activity,
@@ -106,8 +107,8 @@ function Avatar({ initials }) {
   );
 }
 
-// ─── Delete Reply Modal ─────────────────────────────────────────────────────
-function DeleteModal({ feedbackId, onCancel, onConfirm, deleting }) {
+// ─── Delete Feedback Modal (permanent, whole record) ───────────────────────
+function DeleteFeedbackModal({ feedbackId, onCancel, onConfirm, deleting }) {
   return (
     <div className="fixed inset-0 bg-black/35 flex items-center justify-center z-50">
       <div className="bg-white rounded-2xl p-8 w-80 text-center relative shadow-2xl border-2 border-gray-300">
@@ -115,9 +116,9 @@ function DeleteModal({ feedbackId, onCancel, onConfirm, deleting }) {
         <div className="w-14 h-14 rounded-full bg-red-50 flex items-center justify-center mx-auto mb-4 border-2 border-red-100">
           <Trash2 size={24} className="text-red-500" />
         </div>
-        <h3 className="text-lg font-bold text-gray-800 mb-2">Delete Reply?</h3>
+        <h3 className="text-lg font-bold text-gray-800 mb-2">Delete Feedback?</h3>
         <p className="text-sm text-gray-500 mb-3 leading-relaxed">
-          This will permanently delete the reply to "{feedbackId}". The feedback status will revert to Not Replied.
+          This will permanently delete "{feedbackId}" and the visitor's original comment and rating — not just any reply.
         </p>
         <div className="flex items-center gap-2 bg-yellow-50 border-2 border-yellow-200 rounded-lg px-3 py-2 text-xs text-yellow-800 mb-5">
           <AlertTriangle size={13} className="text-yellow-500 flex-shrink-0" /> This action cannot be undone.
@@ -133,8 +134,10 @@ function DeleteModal({ feedbackId, onCancel, onConfirm, deleting }) {
   );
 }
 
+
 // ─── LIST VIEW ────────────────────────────────────────────────────────────
-function FeedbackList({ feedbacks, loading, onView, onReply, onDeleteClick }) {
+function FeedbackList({ feedbacks, loading, onView, onReply, onDeleteFeedbackClick }) {
+  const { can } = useAuth();
   const [search, setSearch] = useState("");
   const [catFilter, setCatFilter] = useState("All Categories");
   const [statusFilter, setStatusFilter] = useState("All Status");
@@ -261,11 +264,13 @@ function FeedbackList({ feedbacks, loading, onView, onReply, onDeleteClick }) {
                     <button onClick={() => onView(f)} className="flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-bold hover:opacity-85 transition shadow-sm" style={{ backgroundColor: "#055E83", color: "#fff" }}>
                       <Eye size={12} /> View
                     </button>
-                    <button onClick={() => onReply(f)} className="flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-bold hover:opacity-85 transition shadow-sm" style={{ backgroundColor: "#E8C110", color: "#055E83" }}>
-                      <Pencil size={12} /> Reply
-                    </button>
-                    {f.status === "REPLIED" && (
-                      <button onClick={() => onDeleteClick(f)} className="flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs font-bold hover:opacity-85 transition shadow-sm bg-red-50 text-red-500 border-2 border-red-100">
+                    {can("feedback", "update") && (
+                      <button onClick={() => onReply(f)} className="flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-bold hover:opacity-85 transition shadow-sm" style={{ backgroundColor: "#E8C110", color: "#055E83" }}>
+                        <Pencil size={12} /> Reply
+                      </button>
+                    )}
+                    {can("feedback", "delete") && (
+                      <button onClick={() => onDeleteFeedbackClick(f)} title="Delete feedback permanently" className="flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs font-bold hover:opacity-85 transition shadow-sm bg-red-500 text-white">
                         <Trash2 size={12} />
                       </button>
                     )}
@@ -297,7 +302,8 @@ function FeedbackList({ feedbacks, loading, onView, onReply, onDeleteClick }) {
 }
 
 // ─── DETAIL VIEW ──────────────────────────────────────────────────────────
-function FeedbackDetail({ fb, allFeedbacks, onReply, onDeleteClick }) {
+function FeedbackDetail({ fb, allFeedbacks, onReply, onDeleteFeedbackClick }) {
+  const { can } = useAuth();
   const userHistory = useMemo(() => {
     if (fb.user === "Anonymous") return null;
     const rows = allFeedbacks.filter((f) => f.user === fb.user);
@@ -322,9 +328,9 @@ function FeedbackDetail({ fb, allFeedbacks, onReply, onDeleteClick }) {
           <button onClick={() => onReply(fb)} className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg hover:opacity-85 transition shadow-sm" style={{ backgroundColor: "#E8C110", color: "#055E83" }}>
             <Pencil size={12} /> {fb.status === "REPLIED" ? "Edit Reply" : "Reply"}
           </button>
-          {fb.status === "REPLIED" && (
-            <button onClick={() => onDeleteClick(fb)} className="flex items-center gap-1.5 text-xs font-bold text-red-500 border-2 border-red-200 bg-white px-3 py-1.5 rounded-lg hover:bg-red-50 transition shadow-sm">
-              <Trash2 size={12} /> Delete Reply
+          {can("feedback", "delete") && (
+            <button onClick={() => onDeleteFeedbackClick(fb)} className="flex items-center gap-1.5 text-xs font-bold text-white bg-red-500 px-3 py-1.5 rounded-lg hover:bg-red-600 transition shadow-sm">
+              <Trash2 size={12} /> Delete Feedback
             </button>
           )}
         </div>
@@ -522,8 +528,8 @@ export default function FeedbackPage() {
   const [selectedId, setSelectedId] = useState(null);
   const [feedbacks, setFeedbacks] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [deleteTarget, setDeleteTarget] = useState(null);
-  const [deleting, setDeleting] = useState(false);
+  const [deleteFeedbackTarget, setDeleteFeedbackTarget] = useState(null);
+  const [deletingFeedback, setDeletingFeedback] = useState(false);
   const [sending, setSending] = useState(false);
 
   const selected = feedbacks.find((f) => f.feedbackId === selectedId) || null;
@@ -548,20 +554,20 @@ export default function FeedbackPage() {
 
   function handleView(fb) { setSelectedId(fb.feedbackId); setView("detail"); }
   function handleReply(fb) { setSelectedId(fb.feedbackId); setView("reply"); }
-  function handleDeleteClick(fb) { setDeleteTarget(fb); }
+  function handleDeleteFeedbackClick(fb) { setDeleteFeedbackTarget(fb); }
 
-  async function handleDeleteConfirm() {
+  async function handleDeleteFeedbackConfirm() {
     try {
-      setDeleting(true);
-      await api.delete(`/feedback/${deleteTarget.feedbackId}/reply`);
+      setDeletingFeedback(true);
+      await api.delete(`/feedback/${deleteFeedbackTarget.feedbackId}`);
       await fetchFeedbacks();
-      if (view === "detail" && selectedId === deleteTarget.feedbackId) setView("list");
+      if (view !== "list" && selectedId === deleteFeedbackTarget.feedbackId) setView("list");
     } catch (err) {
-      console.error("Failed to delete reply:", err);
-      alert(err.response?.data?.error || "Failed to delete the reply. Please try again.");
+      console.error("Failed to delete feedback:", err);
+      alert(err.response?.data?.error || "Failed to delete this feedback. Please try again.");
     } finally {
-      setDeleting(false);
-      setDeleteTarget(null);
+      setDeletingFeedback(false);
+      setDeleteFeedbackTarget(null);
     }
   }
 
@@ -594,16 +600,16 @@ export default function FeedbackPage() {
         />
         <div className="px-6 py-5">
           {view === "list" && (
-            <FeedbackList feedbacks={feedbacks} loading={loading} onView={handleView} onReply={handleReply} onDeleteClick={handleDeleteClick} />
+            <FeedbackList feedbacks={feedbacks} loading={loading} onView={handleView} onReply={handleReply} onDeleteFeedbackClick={handleDeleteFeedbackClick} />
           )}
           {view === "detail" && selected && (
-            <FeedbackDetail fb={selected} allFeedbacks={feedbacks} onReply={handleReply} onDeleteClick={handleDeleteClick} />
+            <FeedbackDetail fb={selected} allFeedbacks={feedbacks} onReply={handleReply} onDeleteFeedbackClick={handleDeleteFeedbackClick} />
           )}
           {view === "reply" && selected && (
             <ReplyView fb={selected} onCancel={() => setView(selected.status === "REPLIED" ? "detail" : "list")} onSend={handleSendReply} sending={sending} />
           )}
-          {deleteTarget && (
-            <DeleteModal feedbackId={deleteTarget.id} onCancel={() => setDeleteTarget(null)} onConfirm={handleDeleteConfirm} deleting={deleting} />
+          {deleteFeedbackTarget && (
+            <DeleteFeedbackModal feedbackId={deleteFeedbackTarget.id} onCancel={() => setDeleteFeedbackTarget(null)} onConfirm={handleDeleteFeedbackConfirm} deleting={deletingFeedback} />
           )}
         </div>
     </div>

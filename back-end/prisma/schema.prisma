@@ -25,6 +25,7 @@ model books {
   cover_image      String?          @db.VarChar(255)
   borrow_records   borrow_records[]
   damage_reports   damage_reports[]
+  feedback         feedback[]
 }
 
 model borrow_records {
@@ -110,6 +111,10 @@ model feedback {
   feedback_date DateTime         @default(now()) @db.Timestamp(0)
   status        feedback_status? @default(pending)
   admin_reply   String?          @db.Text
+  book_id       Int?
+  books         books?           @relation(fields: [book_id], references: [book_id], onDelete: Cascade, onUpdate: Restrict, map: "fk_feedback_book")
+
+  @@index([book_id], map: "book_id")
 }
 
 model library_entries {
@@ -196,7 +201,13 @@ model users {
   role_id              Int?
   created_at           DateTime         @default(now()) @db.Timestamp(0)
   is_active            Boolean?         @default(true)
-  permissions          String?          @db.LongText
+  // Per-module CRUD permission grid, e.g. {"inventory":{"create":false,"read":true,"update":false,"delete":false}, ...}
+  // Stored as MariaDB longtext under the hood (MariaDB's JSON is a longtext
+  // alias), but Prisma must be told this is Json, not String, or every
+  // update to this field throws PrismaClientValidationError.
+  permissions          Json?
+  // Not created by this permissions work — pre-existing column, currently
+  // unused by any code I've touched. Left as-is; flagging only for visibility.
   permission_overrides String?          @db.LongText
   borrow_records       borrow_records[]
   damage_reports       damage_reports[]
@@ -206,6 +217,7 @@ model users {
 
   @@index([role_id], map: "role_id")
 }
+
 
 enum library_entries_purpose {
   Research
