@@ -145,22 +145,6 @@ export default function Login() {
           >
             {loading ? "Signing In..." : "Sign In"} {!loading && <ArrowRight size={18} />}
           </button>
-
-          {/* Divider */}
-          <div className="flex items-center gap-3 my-1">
-            <div className="flex-1 h-px bg-[#E2E8F0]" />
-            <span className="text-xs text-[#64748B]">or continue with</span>
-            <div className="flex-1 h-px bg-[#E2E8F0]" />
-          </div>
-
-          {/* Google Button */}
-          <button
-            type="button"
-            className="w-full border border-[#CBD5E1] bg-white rounded-xl py-3 flex items-center justify-center gap-2 text-sm font-medium text-[#1E293B] hover:bg-gray-50 transition"
-          >
-            <span className="text-blue-500 font-bold text-base">G</span>
-            Sign in with Google
-          </button>
         </form>
 
         {/* Sign Up Link */}

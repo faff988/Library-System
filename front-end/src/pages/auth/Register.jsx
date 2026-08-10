@@ -222,26 +222,6 @@ export default function Register() {
           </div>
         </div>
 
-        {/* Divider */}
-        <div className="flex items-center gap-3">
-          <div className="flex-1 h-px bg-[#E2E8F0]" />
-          <span className="text-xs text-[#64748B]">or register with</span>
-          <div className="flex-1 h-px bg-[#E2E8F0]" />
-        </div>
-
-        {/* Google Button */}
-        <button
-          type="button"
-          onClick={() => {
-            // Add your Google auth logic here
-            console.log("Google registration clicked");
-          }}
-          className="w-full border border-[#CBD5E1] bg-white rounded-xl py-3 flex items-center justify-center gap-2 text-sm font-medium text-[#1E293B] hover:bg-gray-50 transition"
-        >
-          <span className="text-blue-500 font-bold text-base">G</span>
-          Register with Google
-        </button>
-
         {/* Create Account Button */}
         <button
           type="submit"
