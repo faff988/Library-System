@@ -13,6 +13,7 @@ import {
   Search,
   Shapes,
   SlidersHorizontal,
+  Star,
   TrendingUp,
 } from "lucide-react";
 import Navbar from "../../components/Navbar";
@@ -23,6 +24,7 @@ const PERIODS = ["Daily", "Weekly", "Monthly"];
 
 const sortOptions = [
   { value: "borrow-desc", label: "Most Borrowed" },
+  { value: "rating-desc", label: "Highest Rated" },
   { value: "title-asc", label: "Title A-Z" },
   { value: "author-asc", label: "Author A-Z" },
   { value: "status-asc", label: "Status" },
@@ -125,10 +127,10 @@ const CATEGORY_PALETTE = [
   { bg: "bg-[#FEF3C7]", text: "text-[#B45309]" },
 ];
 
-// Maps a { book, timesBorrowed } row from GET /reports/popular-books into
-// the shape the UI uses. There's no rating, reader-count, or "librarian
-// pick" data anywhere in the schema, so those mock fields are dropped
-// rather than faked.
+// Maps a { book, timesBorrowed, averageRating, ratingCount } row from
+// GET /reports/popular-books into the shape the UI uses. averageRating is
+// null when a book has zero source:'book' feedback rows - kept as null
+// (not 0) so the UI can distinguish "unrated" from "rated 0".
 function normalizeRankedBook(row) {
   const book = row.book || {};
   const total = book.total_copies ?? 0;
@@ -142,11 +144,17 @@ function normalizeRankedBook(row) {
     status: computeStatus(total, available),
     cover: COVER_PALETTE[hashString(book.title || "") % COVER_PALETTE.length],
     activeBorrowCount: row.timesBorrowed || 0,
+    averageRating: row.averageRating ?? null,
+    ratingCount: row.ratingCount || 0,
   };
 }
 
 function formatNumber(value) {
   return new Intl.NumberFormat("en-US").format(value);
+}
+
+function formatRating(value) {
+  return value == null ? "--" : value.toFixed(1);
 }
 
 function escapeCsvValue(value) {
@@ -183,6 +191,21 @@ function CategoryPill({ children }) {
   return (
     <span className={`inline-flex min-w-16 justify-center rounded-full px-2 py-1 text-[10px] font-bold ${palette.bg} ${palette.text}`}>
       {children}
+    </span>
+  );
+}
+
+// Small "★ 4.3 (12)" style badge. Shows "Not yet rated" state when
+// ratingCount is 0 rather than a misleading "0.0".
+function RatingBadge({ averageRating, ratingCount, compact = false }) {
+  if (!ratingCount) {
+    return <span className="text-[10px] font-semibold text-gray-300">Not yet rated</span>;
+  }
+  return (
+    <span className={`inline-flex items-center gap-1 font-bold text-amber-600 ${compact ? "text-[10px]" : "text-xs"}`}>
+      <Star size={compact ? 10 : 12} className="fill-amber-500 text-amber-500" />
+      {formatRating(averageRating)}
+      <span className="font-semibold text-gray-400">({formatNumber(ratingCount)})</span>
     </span>
   );
 }
@@ -253,9 +276,6 @@ export default function PopularBookReport() {
         apiFetch(
           `/reports/popular-books?from=${encodeURIComponent(popularRange.from)}&to=${encodeURIComponent(popularRange.to)}&limit=50`
         ),
-        // reportsRoutes.js registers this as `/transaction` (singular) even
-        // though the controller's doc comment says `/transactions` - using
-        // the path as actually mounted.
         apiFetch(
           `/reports/transactions?period=${periodLower}&from=${encodeURIComponent(trendRange.from)}&to=${encodeURIComponent(trendRange.to)}`
         ),
@@ -311,6 +331,14 @@ export default function PopularBookReport() {
       if (sortBy === "title-asc") return first.title.localeCompare(second.title);
       if (sortBy === "author-asc") return first.author.localeCompare(second.author);
       if (sortBy === "status-asc") return first.status.localeCompare(second.status);
+      if (sortBy === "rating-desc") {
+        // Unrated books (averageRating: null) always sort after rated ones,
+        // regardless of direction, then fall back to borrow count.
+        const firstRating = first.averageRating ?? -1;
+        const secondRating = second.averageRating ?? -1;
+        if (secondRating !== firstRating) return secondRating - firstRating;
+        return second.activeBorrowCount - first.activeBorrowCount;
+      }
       return second.activeBorrowCount - first.activeBorrowCount;
     });
   }, [filteredBooks, sortBy]);
@@ -334,7 +362,13 @@ export default function PopularBookReport() {
       return acc;
     }, {});
     const topCategory = Object.entries(categoryCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || "-";
-    return { totalBorrows, mostPopular, topCategory, booksTracked: books.length };
+
+    const ratedBooks = books.filter((book) => book.ratingCount > 0);
+    const overallAverageRating = ratedBooks.length
+      ? ratedBooks.reduce((sum, book) => sum + book.averageRating, 0) / ratedBooks.length
+      : null;
+
+    return { totalBorrows, mostPopular, topCategory, booksTracked: books.length, overallAverageRating, ratedBooksCount: ratedBooks.length };
   }, [books]);
 
   const trendMax = Math.max(...trend.map((item) => item.value), 1);
@@ -402,7 +436,7 @@ export default function PopularBookReport() {
       return;
     }
 
-    const headers = ["Rank", "Book ID", "Title", "ISBN", "Author", "Category", "Borrow Count", "Status", "Period"];
+    const headers = ["Rank", "Book ID", "Title", "ISBN", "Author", "Category", "Borrow Count", "Average Rating", "Rating Count", "Status", "Period"];
     const rows = sortedBooks.map((book, index) => [
       index + 1,
       book.id,
@@ -411,6 +445,8 @@ export default function PopularBookReport() {
       book.author,
       book.category,
       book.activeBorrowCount,
+      book.averageRating != null ? book.averageRating.toFixed(2) : "N/A",
+      book.ratingCount,
       book.status,
       activePeriod,
     ]);
@@ -496,7 +532,7 @@ export default function PopularBookReport() {
           </div>
 
           {/* METRIC CARDS */}
-          <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
             {[
               {
                 label: "Total Borrows",
@@ -531,6 +567,15 @@ export default function PopularBookReport() {
                 icon: Shapes,
                 iconBg: "#CCFBF1",
                 iconColor: "#0D9488",
+              },
+              {
+                label: "Avg. Rating",
+                value: summary.overallAverageRating != null ? summary.overallAverageRating.toFixed(1) : "--",
+                icon: Star,
+                iconBg: "#FEF3C7",
+                iconColor: "#B45309",
+                sub: summary.ratedBooksCount ? `Across ${formatNumber(summary.ratedBooksCount)} rated books` : "No ratings yet",
+                subColor: "#71717A",
               },
             ].map((card) => (
               <MetricCard key={card.label} {...card} />
@@ -643,7 +688,11 @@ export default function PopularBookReport() {
                     <div className="min-w-0 pt-1">
                       <h4 className="truncate text-[12px] font-bold leading-tight text-gray-900">{book.title}</h4>
                       <p className="truncate text-[10px] font-semibold text-gray-500">{book.author}</p>
-                      <p className="mt-1 text-[10px] font-bold text-[#055E83]">{formatNumber(book.activeBorrowCount)} borrows</p>
+                      <div className="mt-1 flex items-center gap-2">
+                        <p className="text-[10px] font-bold text-[#055E83]">{formatNumber(book.activeBorrowCount)} borrows</p>
+                        <span className="text-gray-300">·</span>
+                        <RatingBadge averageRating={book.averageRating} ratingCount={book.ratingCount} compact />
+                      </div>
                     </div>
                   </button>
                 ))}
@@ -752,7 +801,7 @@ export default function PopularBookReport() {
             )}
 
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[860px] text-left">
+              <table className="w-full min-w-[940px] text-left">
                 <thead className="sticky top-0 z-[1] bg-gray-50/90 backdrop-blur text-[10px] uppercase tracking-wider text-gray-400">
                   <tr>
                     <th className="px-5 py-3.5 font-bold">Rank</th>
@@ -773,6 +822,11 @@ export default function PopularBookReport() {
                         Borrow Count
                       </button>
                     </th>
+                    <th className="px-5 py-3.5 text-center font-bold">
+                      <button onClick={() => handleSortChange("rating-desc")} className="uppercase hover:text-[#055E83]">
+                        Rating
+                      </button>
+                    </th>
                     <th className="px-5 py-3.5 font-bold">
                       <button onClick={() => handleSortChange("status-asc")} className="uppercase hover:text-[#055E83]">
                         Status
@@ -783,7 +837,7 @@ export default function PopularBookReport() {
                 <tbody className="divide-y divide-gray-100 text-sm">
                   {loading && !books.length && (
                     <tr>
-                      <td colSpan="7" className="px-5 py-16 text-center">
+                      <td colSpan="8" className="px-5 py-16 text-center">
                         <Loader2 size={20} className="mx-auto animate-spin text-[#055E83]" />
                         <p className="mt-2 text-xs font-bold text-gray-400">Loading popular books...</p>
                       </td>
@@ -815,6 +869,9 @@ export default function PopularBookReport() {
                           <td className="px-5 py-4 text-center text-[12px] font-black text-gray-900">
                             {formatNumber(book.activeBorrowCount)}
                           </td>
+                          <td className="px-5 py-4 text-center">
+                            <RatingBadge averageRating={book.averageRating} ratingCount={book.ratingCount} />
+                          </td>
                           <td className="px-5 py-4">
                             <button
                               onClick={() => handleStatusChange(book.status)}
@@ -830,7 +887,7 @@ export default function PopularBookReport() {
 
                   {!loading && paginatedBooks.length === 0 && (
                     <tr>
-                      <td colSpan="7" className="px-5 py-16 text-center">
+                      <td colSpan="8" className="px-5 py-16 text-center">
                         <p className="text-sm font-bold text-gray-500">No books match the current filters</p>
                         <p className="mt-1 text-xs font-medium text-gray-400">Try adjusting your filters or search terms</p>
                       </td>

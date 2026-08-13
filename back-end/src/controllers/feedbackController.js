@@ -38,10 +38,18 @@ const getOne = asyncHandler(async (req, res) => {
 
 /**
  * POST /api/feedback (public - no auth required, a visitor/member submits this)
- * Body: { userName?, email?, source, comment, rating }
+ * Body: { userName?, email?, source, comment, rating, bookId? }
+ *
+ * FIX: bookId was accepted nowhere before, even though `feedback.book_id`
+ * already exists in the schema with an FK to `books`. Without it, a
+ * source:'book' rating could never be attributed to a specific title -
+ * reportsController.popularBooks has no way to compute a per-book rating
+ * without this. bookId is required when source === 'book' (there's no
+ * other way to know which book a "book" review is about); it's ignored
+ * for 'event'/'general' sources.
  */
 const create = asyncHandler(async (req, res) => {
-  const { userName, email, source, comment, rating } = req.body;
+  const { userName, email, source, comment, rating, bookId } = req.body;
   if (!source || !comment || rating === undefined) {
     throw ApiError.badRequest('source, comment and rating are required');
   }
@@ -56,6 +64,14 @@ const create = asyncHandler(async (req, res) => {
     throw ApiError.badRequest('Invalid email address');
   }
 
+  let resolvedBookId = null;
+  if (source === 'book') {
+    if (!bookId) throw ApiError.badRequest('bookId is required when source is "book"');
+    const book = await prisma.books.findUnique({ where: { book_id: Number(bookId) } });
+    if (!book) throw ApiError.notFound('Book not found');
+    resolvedBookId = book.book_id;
+  }
+
   const feedback = await prisma.feedback.create({
     data: {
       user_name: userName || null,
@@ -63,6 +79,7 @@ const create = asyncHandler(async (req, res) => {
       source,
       comment: comment.trim(),
       rating: ratingNum,
+      book_id: resolvedBookId,
     },
   });
 

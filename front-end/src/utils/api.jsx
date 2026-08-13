@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 // Pull the URL from your environment variables
-const API_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3307/api';
+const API_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3306/api';
 
 export const ASSET_BASE_URL = API_URL.replace(/\/api\/?$/, '');
 

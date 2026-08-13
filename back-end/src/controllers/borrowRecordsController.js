@@ -24,6 +24,11 @@ const { buildMeta } = require('../utils/pagination');
  * See README "Known mismatches" #4/#5.
  */
 
+// damage_reports_book_condition enum only has 'Fair' and 'Damaged' (no
+// 'Good', no 'Lost' yet - see damageReportsController.CONDITIONS). 'Good'
+// returns don't get a damage_reports row - there's nothing to report.
+const DAMAGE_REPORT_CONDITIONS = ['Fair', 'Damaged'];
+
 function serialize(record) {
   const isOverdue = record.status === 'Borrowed' && new Date(record.due_date) < new Date();
   return { ...record, isOverdue };
@@ -33,7 +38,6 @@ function serialize(record) {
 const list = asyncHandler(async (req, res) => {
   const { search, status, memberId, bookId } = req.query;
 
-  // Safely parse pagination parameters to prevent Prisma from receiving NaN
   const page = Math.max(1, parseInt(req.query.page, 10) || 1);
   const limit = Math.max(1, parseInt(req.query.limit, 10) || 10);
   const skip = (page - 1) * limit;
@@ -120,9 +124,6 @@ const create = asyncHandler(async (req, res) => {
     }
   }
 
-  // due_date is required by the schema type but will be OVERWRITTEN by the
-  // `after_book_borrow` trigger to NOW() + 14 days - the value sent here is
-  // just a placeholder to satisfy the NOT NULL column before the trigger runs.
   const placeholderDueDate = new Date();
   placeholderDueDate.setDate(placeholderDueDate.getDate() + 14);
 
@@ -137,7 +138,6 @@ const create = asyncHandler(async (req, res) => {
     include: { members: true, books: true },
   });
 
-  // --- AUTOMATIC NOTIFICATION FOR BORROWING ---
   await notify({
     title: 'Book Borrowed',
     message: `"${book.title}" was borrowed by ${member.full_name}. Due in 14 days.`,
@@ -157,14 +157,23 @@ const create = asyncHandler(async (req, res) => {
 
 /**
  * PUT /api/borrow-records/:id/return
- * Flips status -> 'Returned' and updates return_condition. 
+ * Flips status -> 'Returned' and updates return_condition.
  * The `after_book_return` trigger handles return_date and restocking available_copies.
+ *
+ * FIX: when the returned condition is 'Fair' or 'Damaged', this now also
+ * creates a matching row in `damage_reports` (same shape as
+ * damageReportsController.create). Previously return_condition was only
+ * ever written onto borrow_records, so nothing showed up in
+ * reportsController.lostDamaged, which reads exclusively from
+ * damage_reports - a book marked "Damaged" here would silently never
+ * appear on the Lost/Damaged report. 'Good' still creates no report row,
+ * since there's nothing to flag.
  */
 const returnBook = asyncHandler(async (req, res) => {
   const id = Number(req.params.id);
   if (isNaN(id)) throw ApiError.badRequest('Invalid ID format');
 
-  const { condition } = req.body;
+  const { condition, damageDescription } = req.body;
 
   const existing = await prisma.borrow_records.findUnique({
     where: { borrow_id: id },
@@ -173,19 +182,39 @@ const returnBook = asyncHandler(async (req, res) => {
   if (!existing) throw ApiError.notFound('Borrow record not found');
   if (existing.status === 'Returned') throw ApiError.badRequest('This book has already been returned');
 
+  const resolvedCondition = condition || 'Good';
+
   const record = await prisma.borrow_records.update({
     where: { borrow_id: id },
     data: { 
       status: 'Returned',
-      return_condition: condition || 'Good',
+      return_condition: resolvedCondition,
     },
     include: { members: true, books: true },
   });
 
-  // --- AUTOMATIC NOTIFICATION FOR RETURN ---
+  // --- NEW: mirror a Fair/Damaged return into damage_reports so it shows
+  // up on the Lost/Damaged report. Wrapped so a failure here never blocks
+  // the return itself from succeeding (same non-fatal philosophy as notify()).
+  if (DAMAGE_REPORT_CONDITIONS.includes(resolvedCondition) && req.user?.userId) {
+    try {
+      await prisma.damage_reports.create({
+        data: {
+          book_id: existing.book_id,
+          borrow_id: existing.borrow_id,
+          reported_by: req.user.userId,
+          book_condition: resolvedCondition,
+          damage_description: damageDescription || null,
+        },
+      });
+    } catch (err) {
+      console.warn('⚠️ Non-fatal: failed to create damage_reports row on return:', err.message);
+    }
+  }
+
   await notify({
     title: 'Book Returned',
-    message: `"${existing.books?.title || 'A book'}" was returned by ${existing.members?.full_name || 'a member'}. Condition: ${condition || 'Good'}.`,
+    message: `"${existing.books?.title || 'A book'}" was returned by ${existing.members?.full_name || 'a member'}. Condition: ${resolvedCondition}.`,
   });
 
   await logAction({ userId: req.user?.userId, action: 'RETURN', tableName: 'borrow_records', recordId: id, req });
@@ -200,7 +229,6 @@ const returnBook = asyncHandler(async (req, res) => {
  * 'Borrowed' record whose due_date has passed into 'Overdue'.
  */
 const refreshOverdue = asyncHandler(async (req, res) => {
-  // Find all records that are about to become overdue to create notifications for them
   const recordsToMarkOverdue = await prisma.borrow_records.findMany({
     where: { status: 'Borrowed', due_date: { lt: new Date() } },
     include: { members: true, books: true },
@@ -211,7 +239,6 @@ const refreshOverdue = asyncHandler(async (req, res) => {
     data: { status: 'Overdue' },
   });
 
-  // --- AUTOMATIC NOTIFICATION FOR OVERDUE BOOKS ---
   if (recordsToMarkOverdue.length > 0) {
     const notificationPromises = recordsToMarkOverdue.map((rec) =>
       notify({
