@@ -134,8 +134,28 @@ function TransactionList({ onNewBorrow, onViewDetails, onReturn, refreshKey }) {
   const [page, setPage] = useState(1);
 
   useEffect(() => {
-    fetchRecords();
+    // FIX: previously only fetched records as-is, so any book that had
+    // become overdue since the last manual "Refresh Overdue Status" click
+    // stayed status='Borrowed' in the DB - which meant refreshOverdue's
+    // notify() calls never fired and nobody got alerted. Now we silently
+    // run refresh-overdue every time this list loads (first mount, and
+    // whenever refreshKey bumps after New Borrow / Return), so overdue
+    // flips + notifications happen passively instead of depending on
+    // staff remembering to click the button.
+    autoRefreshOverdueThenFetch();
   }, [refreshKey]);
+
+  const autoRefreshOverdueThenFetch = async () => {
+    try {
+      // Best-effort: if this fails (e.g. offline), still fall through to
+      // fetchRecords so the page isn't blocked from loading.
+      await api.post("/borrow-records/refresh-overdue");
+    } catch (err) {
+      console.error("Silent overdue auto-refresh failed:", err);
+    } finally {
+      fetchRecords();
+    }
+  };
 
   const fetchRecords = async () => {
     try {

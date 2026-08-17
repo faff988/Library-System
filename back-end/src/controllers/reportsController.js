@@ -17,6 +17,16 @@ function isOverdue(record) {
   return ['Borrowed', 'Overdue'].includes(record.status) && new Date(record.due_date) < new Date();
 }
 
+/**
+ * GET /api/reports/popular-books?from=&to=&limit=
+ *
+ * Ranking is still purely by timesBorrowed (unchanged) - ratings are
+ * attached per book as extra context, not blended into the ranking.
+ * averageRating/ratingCount come from `feedback` rows where
+ * source='book' and book_id is set (see feedbackController.create).
+ * Books with zero ratings get averageRating: null, ratingCount: 0
+ * rather than being dropped from the response.
+ */
 const popularBooks = asyncHandler(async (req, res) => {
   const { from, to } = req.query;
   const limit = Math.min(100, Number(req.query.limit) || 20);
@@ -30,11 +40,30 @@ const popularBooks = asyncHandler(async (req, res) => {
     take: limit,
   });
 
-  const books = await prisma.books.findMany({ where: { book_id: { in: grouped.map((g) => g.book_id) } } });
+  const bookIds = grouped.map((g) => g.book_id);
+
+  const books = await prisma.books.findMany({ where: { book_id: { in: bookIds } } });
   const bookMap = new Map(books.map((b) => [b.book_id, b]));
 
+  const ratingGroups = bookIds.length
+    ? await prisma.feedback.groupBy({
+        by: ['book_id'],
+        where: { source: 'book', book_id: { in: bookIds } },
+        _avg: { rating: true },
+        _count: { rating: true },
+      })
+    : [];
+  const ratingMap = new Map(
+    ratingGroups.map((r) => [r.book_id, { averageRating: r._avg.rating, ratingCount: r._count.rating }])
+  );
+
   const data = grouped
-    .map((g) => ({ book: bookMap.get(g.book_id), timesBorrowed: g._count.book_id }))
+    .map((g) => ({
+      book: bookMap.get(g.book_id),
+      timesBorrowed: g._count.book_id,
+      averageRating: ratingMap.get(g.book_id)?.averageRating ?? null,
+      ratingCount: ratingMap.get(g.book_id)?.ratingCount ?? 0,
+    }))
     .filter((row) => row.book);
 
   res.json({ success: true, data });
@@ -121,9 +150,6 @@ const borrowReturn = asyncHandler(async (req, res) => {
     total: records.length,
     borrowed: records.filter((r) => r.status === 'Borrowed').length,
     returned: records.filter((r) => r.status === 'Returned').length,
-    // Was `r.status === 'Overdue'` only, which returns 0 whenever nothing
-    // flips the enum from 'Borrowed' to 'Overdue' on schedule. Now shares
-    // the same due_date-based check as /books/stats and /reports/fines.
     overdue: records.filter(isOverdue).length,
   };
 

@@ -199,13 +199,10 @@ model users {
   phone_number         String?   @db.VarChar(15)
   hash_password        String    @db.VarChar(255)
   role_id              Int?
-  created_at           DateTime  @default(now()) @db.Timestamp(0)
-  is_active            Boolean?  @default(true)
-  
-  // Change this line from Json? to String? @db.LongText
-  permissions          String?   @db.LongText
-  
-  permission_overrides String?   @db.LongText
+  created_at           DateTime         @default(now()) @db.Timestamp(0)
+  is_active            Boolean?         @default(true)
+  permissions          String?          @db.LongText
+  permission_overrides String?          @db.LongText
   borrow_records       borrow_records[]
   damage_reports       damage_reports[]
   donations            donations[]
@@ -214,7 +211,6 @@ model users {
 
   @@index([role_id], map: "role_id")
 }
-
 
 enum library_entries_purpose {
   Research
