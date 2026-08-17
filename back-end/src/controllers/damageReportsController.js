@@ -17,7 +17,11 @@ const list = asyncHandler(async (req, res) => {
     prisma.damage_reports.findMany({
       where,
       include: {
-        books: { select: { title: true, author: true, dewey_code: true } },
+        // `category` added - it's a required, always-populated column on
+        // `books` (see booksController.categoryFromDeweyCode), so leaving
+        // it out of the select is what was producing "Uncategorized"
+        // downstream, not missing data.
+        books: { select: { title: true, author: true, dewey_code: true, category: true } },
         borrow_records: { select: { member_id: true, members: { select: { full_name: true } } } },
         users: { select: { first_name: true, last_name: true } },
       },

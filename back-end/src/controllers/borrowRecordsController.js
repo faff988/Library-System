@@ -24,6 +24,12 @@ const { buildMeta } = require('../utils/pagination');
  * See README "Known mismatches" #4/#5.
  */
 
+// Return conditions that should automatically open a damage_reports entry.
+// Matches the borrow_records_return_condition enum minus 'Good'. Kept in
+// sync with damage_reports_book_condition, which also allows 'Lost' - but
+// 'Lost' isn't a valid return_condition, so it can never come from here.
+const DAMAGE_CONDITIONS = ['Fair', 'Damaged'];
+
 function serialize(record) {
   const isOverdue = record.status === 'Borrowed' && new Date(record.due_date) < new Date();
   return { ...record, isOverdue };
@@ -157,14 +163,22 @@ const create = asyncHandler(async (req, res) => {
 
 /**
  * PUT /api/borrow-records/:id/return
- * Flips status -> 'Returned' and updates return_condition. 
+ * Flips status -> 'Returned' and updates return_condition.
  * The `after_book_return` trigger handles return_date and restocking available_copies.
+ *
+ * Returning as 'Fair' or 'Damaged' also auto-creates a matching
+ * damage_reports row in the same transaction, attributed to the staff user
+ * processing the return, with no description (staff can edit/add detail
+ * from the Damage Reports page afterward). This requires a logged-in staff
+ * user, since damage_reports.reported_by is NOT NULL - a 'Good' return has
+ * no such requirement and behaves as before.
  */
 const returnBook = asyncHandler(async (req, res) => {
   const id = Number(req.params.id);
   if (isNaN(id)) throw ApiError.badRequest('Invalid ID format');
 
   const { condition } = req.body;
+  const finalCondition = condition || 'Good';
 
   const existing = await prisma.borrow_records.findUnique({
     where: { borrow_id: id },
@@ -173,19 +187,38 @@ const returnBook = asyncHandler(async (req, res) => {
   if (!existing) throw ApiError.notFound('Borrow record not found');
   if (existing.status === 'Returned') throw ApiError.badRequest('This book has already been returned');
 
-  const record = await prisma.borrow_records.update({
-    where: { borrow_id: id },
-    data: { 
-      status: 'Returned',
-      return_condition: condition || 'Good',
-    },
-    include: { members: true, books: true },
-  });
+  const needsDamageReport = DAMAGE_CONDITIONS.includes(finalCondition);
+  if (needsDamageReport && !req.user?.userId) {
+    throw ApiError.unauthorized('Must be logged in as staff to return a book as Fair or Damaged');
+  }
+
+  const [record] = await prisma.$transaction([
+    prisma.borrow_records.update({
+      where: { borrow_id: id },
+      data: {
+        status: 'Returned',
+        return_condition: finalCondition,
+      },
+      include: { members: true, books: true },
+    }),
+    ...(needsDamageReport
+      ? [
+          prisma.damage_reports.create({
+            data: {
+              book_id: existing.book_id,
+              borrow_id: existing.borrow_id,
+              reported_by: req.user.userId,
+              book_condition: finalCondition,
+            },
+          }),
+        ]
+      : []),
+  ]);
 
   // --- AUTOMATIC NOTIFICATION FOR RETURN ---
   await notify({
     title: 'Book Returned',
-    message: `"${existing.books?.title || 'A book'}" was returned by ${existing.members?.full_name || 'a member'}. Condition: ${condition || 'Good'}.`,
+    message: `"${existing.books?.title || 'A book'}" was returned by ${existing.members?.full_name || 'a member'}. Condition: ${finalCondition}.`,
   });
 
   await logAction({ userId: req.user?.userId, action: 'RETURN', tableName: 'borrow_records', recordId: id, req });

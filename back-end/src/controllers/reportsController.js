@@ -314,7 +314,11 @@ const staffActivity = asyncHandler(async (req, res) => {
 const lostDamaged = asyncHandler(async (req, res) => {
   const rows = await prisma.damage_reports.findMany({
     include: {
-      books: { select: { title: true, author: true, dewey_code: true } },
+      // `category` added to the select - it's a required, always-populated
+      // column on `books` (see booksController.categoryFromDeweyCode), so
+      // once it's actually selected here every row has a real category
+      // instead of falling back to "Uncategorized" on the frontend.
+      books: { select: { title: true, author: true, dewey_code: true, category: true } },
       borrow_records: { include: { members: { select: { full_name: true } } } },
       users: { select: { first_name: true, last_name: true } },
     },
