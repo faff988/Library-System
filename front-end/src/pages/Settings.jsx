@@ -746,7 +746,7 @@ export default function Settings() {
   };
 
   return (
-    <div className="flex-1 bg-[#F8FAFC] font-sans">
+    <div className="flex-1 bg-[#E9EEF4] font-sans">
         <Navbar title="Settings" breadcrumb="Welcome Back!" />
 
         <div className="px-8 py-6 max-w-5xl mx-auto space-y-5">

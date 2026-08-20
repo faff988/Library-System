@@ -28,44 +28,56 @@ function toPublicUser(user) {
   return rest;
 }
 
+/**
+ * POST /api/auth/register (public - no auth required)
+ *
+ * FIX: roleId used to be read straight from req.body and passed through to
+ * role_id on create. Since this endpoint has no `authenticate` middleware
+ * (by design - anyone can sign up), that let any caller self-register as
+ * Admin (or any other role) just by passing that role's roleId in the
+ * request body - a full privilege-escalation hole, especially combined
+ * with useAuth.js's `can()` giving Admins an unconditional bypass on every
+ * permission check. Public registration now always resolves to the
+ * Librarian role regardless of what's in the body; roleId is no longer
+ * destructured from req.body at all. Elevating someone to a higher role
+ * has to happen through an authenticated, Admin-only endpoint instead
+ * (e.g. staffController/usersController's update path) - not here.
+ */
 const register = asyncHandler(async (req, res) => {
-    const {firstName, lastName, email, phone, password, roleId} = req.body;
+    const { firstName, lastName, email, phone, password } = req.body;
 
-    if(!firstName || !lastName || !email || !password){
+    if (!firstName || !lastName || !email || !password) {
         throw ApiError.badRequest('firstName, lastName, email and password are required');
     }
 
-     if (password.length < 6) {
-    throw ApiError.badRequest('Password must be at least 6 characters long');
-  }
+    if (password.length < 6) {
+        throw ApiError.badRequest('Password must be at least 6 characters long');
+    }
 
-  const existing = await prisma.users.findUnique({ where: { email } });
-  if (existing) throw ApiError.conflict('An account with this email already exists');
+    const existing = await prisma.users.findUnique({ where: { email } });
+    if (existing) throw ApiError.conflict('An account with this email already exists');
 
-  let resolvedRoleId = roleId;
-  if (!resolvedRoleId) {
     const librarianRole = await prisma.roles.findUnique({ where: { role_name: 'Librarian' } });
-    resolvedRoleId = librarianRole ? librarianRole.role_id : null;
-  }
+    const resolvedRoleId = librarianRole ? librarianRole.role_id : null;
 
-  const hash_password = await bcrypt.hash(password, SALT_ROUNDS);
+    const hash_password = await bcrypt.hash(password, SALT_ROUNDS);
 
-  const user = await prisma.users.create({
-    data: {
-      first_name: firstName,
-      last_name: lastName,
-      email,
-      phone_number: phone || null,
-      hash_password,
-      role_id: resolvedRoleId,
-    },
-    include: { roles: true },
-  });
+    const user = await prisma.users.create({
+        data: {
+            first_name: firstName,
+            last_name: lastName,
+            email,
+            phone_number: phone || null,
+            hash_password,
+            role_id: resolvedRoleId,
+        },
+        include: { roles: true },
+    });
 
-   await logAction({ userId: user.user_id, action: 'REGISTER', tableName: 'users', recordId: user.user_id, req });
+    await logAction({ userId: user.user_id, action: 'REGISTER', tableName: 'users', recordId: user.user_id, req });
 
-   const token = signToken(user);
-  res.status(201).json({ success: true, data: { user: toPublicUser(user), token } });
+    const token = signToken(user);
+    res.status(201).json({ success: true, data: { user: toPublicUser(user), token } });
 });
 
 
