@@ -30,6 +30,8 @@ router.use('/dashboard', require('./dashboardRoutes'));
 
 // Library Settings
 router.use('/library-config', require('./libraryConfigRoutes'));
+router.use('/backups', require('./backupRoutes'));
 //staff
+router.use('/chat', require('./chatRoutes'));
 
 module.exports = router;
