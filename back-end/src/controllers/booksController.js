@@ -6,6 +6,7 @@ const asyncHandler = require('../utils/asyncHandler');
 const logAction = require('../utils/logAction');
 const notify = require('../utils/notify');
 const { getPagination, buildMeta } = require('../utils/pagination');
+const { baseUploadsDir } = require('../middleware/upload');
 
 const LANGUAGES = ['Khmer', 'English', 'French'];
 
@@ -65,7 +66,7 @@ function parseBoolean(value, defaultValue) {
 }
 
 function deleteCoverFile(filename) {
-  const filePath = path.join(__dirname, '../../uploads/covers', filename);
+  const filePath = path.join(baseUploadsDir, 'covers', filename);
   fs.unlink(filePath, (err) => {
     if (err && err.code !== 'ENOENT') {
       console.warn('⚠️ Failed to delete cover file:', filePath, err.message);

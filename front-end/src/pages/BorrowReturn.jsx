@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo } from "react";
 import {
   Search, Plus, Calendar, User, BookOpen, RefreshCcw,
-  CheckCircle, ArrowLeft, ChevronRight, AlertCircle, X
+  CheckCircle, ArrowLeft, ChevronRight, AlertCircle, X,
+  Check, AlertTriangle,
 } from "lucide-react";
 import Navbar from "../components/Navbar";
 import api, { ASSET_BASE_URL } from "../utils/api";
@@ -124,8 +125,84 @@ function rankBooks(query, books, limit = 6) {
     .map((x) => x.b);
 }
 
+function Toast({ toast, onClose }) {
+  useEffect(() => {
+    if (!toast) return undefined;
+    const timer = setTimeout(onClose, 4000);
+    return () => clearTimeout(timer);
+  }, [toast, onClose]);
+
+  if (!toast) return null;
+  const variants = {
+    success: { bg: "bg-green-600", Icon: Check },
+    warning: { bg: "bg-amber-500", Icon: AlertTriangle },
+  };
+  const { bg, Icon } = variants[toast.type] || variants.success;
+
+  return (
+    <div className="fixed top-5 right-5 z-[100]">
+      <div className={`flex items-center gap-2.5 ${bg} text-white text-sm font-bold px-4 py-3 rounded-xl shadow-lg max-w-sm`}>
+        <Icon size={16} className="shrink-0" />
+        <span>{toast.message}</span>
+        <button onClick={onClose} className="ml-1 text-white/70 hover:text-white shrink-0"><X size={14} /></button>
+      </div>
+    </div>
+  );
+}
+
+// Reusable confirmation modal
+function ConfirmModal({ open, title, children, confirmLabel = "Confirm", loading, onConfirm, onCancel }) {
+  useEffect(() => {
+    if (!open) return undefined;
+    const onKey = (e) => { if (e.key === "Escape" && !loading) onCancel(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, loading, onCancel]);
+
+  if (!open) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-[110] flex items-center justify-center bg-black/40 px-4"
+      onClick={() => !loading && onCancel()}
+    >
+      <div
+        className="bg-white rounded-2xl border-2 border-gray-300 w-full max-w-md p-6"
+        style={{ boxShadow: "0 8px 30px rgba(0,0,0,0.25)" }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start gap-3 mb-4">
+          <div className="w-10 h-10 rounded-full bg-green-50 flex items-center justify-center shrink-0">
+            <CheckCircle size={20} className="text-green-600" />
+          </div>
+          <div>
+            <h3 className="text-base font-bold text-gray-800">{title}</h3>
+            <div className="text-sm text-gray-500 mt-1">{children}</div>
+          </div>
+        </div>
+        <div className="flex gap-3 justify-end">
+          <button
+            onClick={onCancel}
+            disabled={loading}
+            className="px-5 py-2.5 rounded-xl border-2 border-gray-300 text-sm font-bold text-gray-600 hover:bg-gray-50 transition bg-white disabled:opacity-60"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={loading}
+            className="px-5 py-2.5 rounded-xl text-sm font-bold text-white bg-green-600 hover:bg-green-700 transition disabled:opacity-60"
+          >
+            {loading ? "Processing..." : confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Page 1: Transaction List 
-function TransactionList({ onNewBorrow, onViewDetails, onReturn, refreshKey }) {
+function TransactionList({ onNewBorrow, onViewDetails, onReturn, refreshKey, setToast }) {
   const [search, setSearch] = useState("");
   const [activeTab, setActiveTab] = useState("All");
   const [records, setRecords] = useState([]);
@@ -134,12 +211,8 @@ function TransactionList({ onNewBorrow, onViewDetails, onReturn, refreshKey }) {
   const [page, setPage] = useState(1);
 
   useEffect(() => {
-    // FIX: previously only fetched records as-is, so any book that had
-    // become overdue since the last manual "Refresh Overdue Status" click
-    // stayed status='Borrowed' in the DB - which meant refreshOverdue's
-    // notify() calls never fired and nobody got alerted. Now we silently
-    // run refresh-overdue every time this list loads (first mount, and
-    // whenever refreshKey bumps after New Borrow / Return), so overdue
+    // Silently run refresh-overdue every time this list loads (first mount,
+    // and whenever refreshKey bumps after New Borrow / Return), so overdue
     // flips + notifications happen passively instead of depending on
     // staff remembering to click the button.
     autoRefreshOverdueThenFetch();
@@ -149,7 +222,13 @@ function TransactionList({ onNewBorrow, onViewDetails, onReturn, refreshKey }) {
     try {
       // Best-effort: if this fails (e.g. offline), still fall through to
       // fetchRecords so the page isn't blocked from loading.
-      await api.post("/borrow-records/refresh-overdue");
+      const response = await api.post("/borrow-records/refresh-overdue");
+      const count = response.data?.count ?? 0;
+      // Only alert when something actually flipped, so this silent
+      // background check doesn't nag staff on every page load.
+      if (count > 0) {
+        setToast({ type: "warning", message: `${count} book${count === 1 ? "" : "s"} just became overdue.` });
+      }
     } catch (err) {
       console.error("Silent overdue auto-refresh failed:", err);
     } finally {
@@ -175,7 +254,13 @@ function TransactionList({ onNewBorrow, onViewDetails, onReturn, refreshKey }) {
   const handleRefreshOverdue = async () => {
     try {
       setRefreshing(true);
-      await api.post("/borrow-records/refresh-overdue");
+      const response = await api.post("/borrow-records/refresh-overdue");
+      const count = response.data?.count ?? 0;
+      setToast(
+        count > 0
+          ? { type: "warning", message: `${count} book${count === 1 ? "" : "s"} marked overdue.` }
+          : { type: "success", message: "No new overdue books — everything's up to date." }
+      );
       await fetchRecords();
     } catch (err) {
       console.error("Failed to refresh overdue status:", err);
@@ -399,7 +484,13 @@ function NewBorrow({ onCancel, onSave }) {
         memberId: selectedMember.member_id,
         bookId: selectedBook.book_id,
       });
-      if (response.data?.success) onSave();
+      if (response.data?.success) {
+        const dueDate = response.data.data?.due_date;
+        onSave({
+          type: "success",
+          message: `"${selectedBook.title}" was borrowed by ${selectedMember.full_name}${dueDate ? ` — due ${formatDate(dueDate)}` : ""}.`,
+        });
+      }
     } catch (err) {
       console.error("Failed to create borrow record:", err);
       const backendMessage = err.response?.data?.error || err.response?.data?.message;
@@ -667,6 +758,7 @@ function ReturnBook({ transaction, onCancel, onConfirm }) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [condition, setCondition] = useState("Good");
+  const [showConfirm, setShowConfirm] = useState(false);
 
   const daysOverdue = transaction.status === "Overdue"
     ? Math.max(0, Math.ceil((new Date() - new Date(transaction.dueDate)) / (1000 * 60 * 60 * 24)))
@@ -679,9 +771,14 @@ function ReturnBook({ transaction, onCancel, onConfirm }) {
       await api.put(`/borrow-records/${transaction.borrow_id}/return`, {
         condition,
       });
-      onConfirm();
+      onConfirm({
+        type: "success",
+        message: `"${transaction.book}" was returned by ${transaction.member}. Condition: ${condition}.`,
+      });
     } catch (err) {
       console.error("Failed to process return:", err);
+      // Close the modal so the error banner is visible
+      setShowConfirm(false);
       const backendMessage = err.response?.data?.error || err.response?.data?.message;
       setError(backendMessage || "Failed to process the return. Please try again.");
     } finally {
@@ -787,9 +884,10 @@ function ReturnBook({ transaction, onCancel, onConfirm }) {
               </div>
             </div>
 
-            <button onClick={handleConfirm} disabled={submitting}
+            {/* Opens the confirmation modal instead of submitting directly */}
+            <button onClick={() => setShowConfirm(true)} disabled={submitting}
               className="w-full flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-bold text-white bg-green-600 hover:bg-green-700 transition shadow-md disabled:opacity-60">
-              <CheckCircle size={15} /> {submitting ? "Processing..." : "Confirm Return"}
+              <CheckCircle size={15} /> Confirm Return
             </button>
 
             <button onClick={onCancel}
@@ -799,6 +897,27 @@ function ReturnBook({ transaction, onCancel, onConfirm }) {
           </div>
         </div>
       </div>
+
+      <ConfirmModal
+        open={showConfirm}
+        title="Return this book?"
+        confirmLabel="Yes, Return Book"
+        loading={submitting}
+        onConfirm={handleConfirm}
+        onCancel={() => setShowConfirm(false)}
+      >
+        <p>
+          <span className="font-bold text-gray-700">"{transaction.book}"</span> will be marked as
+          returned by <span className="font-bold text-gray-700">{transaction.member}</span> with
+          condition <span className="font-bold text-gray-700">{condition}</span>.
+        </p>
+        {daysOverdue > 0 && (
+          <p className="text-red-600 font-semibold mt-2">
+            This book is {daysOverdue} day{daysOverdue === 1 ? "" : "s"} overdue.
+          </p>
+        )}
+        <p className="mt-2">This action will restock the book in inventory.</p>
+      </ConfirmModal>
     </div>
   );
 }
@@ -1004,16 +1123,23 @@ export default function BorrowReturn() {
   const [page, setPage] = useState("list");
   const [selected, setSelected] = useState(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [toast, setToast] = useState(null);
 
   const backToList = () => { setPage("list"); setSelected(null); setRefreshKey((k) => k + 1); };
 
+  // New Borrow and Return both hand back a toast payload on success; show
+  // it, then return to the list (which also triggers the overdue re-check).
+  const handleBorrowSaved = (toastPayload) => { if (toastPayload) setToast(toastPayload); backToList(); };
+  const handleReturnConfirmed = (toastPayload) => { if (toastPayload) setToast(toastPayload); backToList(); };
+
   const render = () => {
-    if (page === "new") return <NewBorrow onCancel={backToList} onSave={backToList} />;
-    if (page === "return" && selected) return <ReturnBook transaction={selected} onCancel={backToList} onConfirm={backToList} />;
+    if (page === "new") return <NewBorrow onCancel={backToList} onSave={handleBorrowSaved} />;
+    if (page === "return" && selected) return <ReturnBook transaction={selected} onCancel={backToList} onConfirm={handleReturnConfirmed} />;
     if (page === "detail" && selected) return <ReturnBookDetail transactionId={selected} onBack={backToList} />;
     return (
       <TransactionList
         refreshKey={refreshKey}
+        setToast={setToast}
         onNewBorrow={() => setPage("new")}
         onViewDetails={(borrowId) => { setSelected(borrowId); setPage("detail"); }}
         onReturn={(t) => { setSelected(t); setPage("return"); }}
@@ -1023,6 +1149,7 @@ export default function BorrowReturn() {
 
   return (
     <div className="flex-1 min-w-0 bg-[#E9EEF4]">
+        <Toast toast={toast} onClose={() => setToast(null)} />
         {render()}
     </div>
   );

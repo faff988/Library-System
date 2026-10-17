@@ -66,13 +66,14 @@ model damage_reports {
 }
 
 model donations {
-  donation_id   Int              @id @default(autoincrement())
-  donor_name    String?          @default("Anonymous") @db.VarChar(150)
-  amount        Decimal?         @db.Decimal(10, 2)
-  received_by   Int
-  donation_date DateTime         @default(now()) @db.Timestamp(0)
-  items         donation_items[]
-  users         users            @relation(fields: [received_by], references: [user_id], onUpdate: Restrict, map: "donations_ibfk_1")
+  donation_id        Int              @id @default(autoincrement())
+  donor_name         String?          @default("Anonymous") @db.VarChar(150)
+  amount             Decimal?         @db.Decimal(10, 2)
+  received_by        Int
+  donation_date      DateTime         @default(now()) @db.Timestamp(0)
+  filed_to_inventory Boolean          @default(false)
+  items              donation_items[]
+  users              users            @relation(fields: [received_by], references: [user_id], onUpdate: Restrict, map: "donations_ibfk_1")
 
   @@index([received_by], map: "received_by")
 }

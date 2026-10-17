@@ -62,6 +62,31 @@ function TypingIndicator() {
   );
 }
 
+function ResizeHandle({ corner, onPointerDown, onPointerMove, onPointerUp }) {
+  const posClass = {
+    "top-left": "top-0 left-0 cursor-nwse-resize",
+    "bottom-right": "bottom-0 right-0 cursor-nwse-resize",
+    "top-right": "top-0 right-0 cursor-nesw-resize",
+    "bottom-left": "bottom-0 left-0 cursor-nesw-resize",
+  }[corner];
+
+  return (
+    <div
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      className={`absolute ${posClass} w-5 h-5 z-10 flex items-center justify-center touch-none select-none group`}
+    >
+      <div className="w-2 h-2 grid grid-cols-2 gap-0.5 opacity-40 group-hover:opacity-80 transition-opacity">
+        <span className="w-0.5 h-0.5 rounded-full bg-slate-500" />
+        <span className="w-0.5 h-0.5 rounded-full bg-slate-500" />
+        <span className="w-0.5 h-0.5 rounded-full bg-slate-500" />
+        <span className="w-0.5 h-0.5 rounded-full bg-slate-500" />
+      </div>
+    </div>
+  );
+}
+
 export default function AiBubblechat() {
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState(initialMessages);
@@ -70,17 +95,26 @@ export default function AiBubblechat() {
   const [sending, setSending] = useState(false);
   const bottomRef = useRef(null);
 
-  // Dragging states & references
+  // Dragging state & refs (bubble position)
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const dragStartPos = useRef({ x: 0, y: 0 });
   const isClick = useRef(true);
 
-  // Initialize position to bottom-right corner
+  // Resizing state & refs (panel size)
+  const [size, setSize] = useState({ width: 384, height: 500 });
+  const [isResizing, setIsResizing] = useState(false);
+  const resizeStartRef = useRef({ x: 0, y: 0, width: 0, height: 0, corner: "" });
+
+  // Initialize position to bottom-right corner, size to a sane default
   useEffect(() => {
     setPosition({
       x: window.innerWidth - 80,
       y: window.innerHeight - 80,
+    });
+    setSize({
+      width: window.innerWidth < 640 ? 320 : 384,
+      height: 500,
     });
   }, []);
 
@@ -120,6 +154,54 @@ export default function AiBubblechat() {
     if (!open) setUnread(0);
   };
 
+  // Determine dynamic placement based on bubble position relative to screen center
+  const isTopHalf = position.y < window.innerHeight / 2;
+  const isLeftHalf = position.x < window.innerWidth / 2;
+
+  const verticalClass = isTopHalf ? "top-16 mt-2" : "bottom-16 mb-2";
+  const horizontalClass = isLeftHalf ? "left-0" : "right-0";
+
+  // The free (resizable) corner is always the opposite of wherever the
+  // panel is anchored near the bubble — e.g. if the panel's bottom-right
+  // is pinned near the bubble, the top-left corner is the one that moves.
+  const resizeCorner = `${isTopHalf ? "bottom" : "top"}-${isLeftHalf ? "right" : "left"}`;
+
+  const handleResizePointerDown = (e) => {
+    e.stopPropagation();
+    setIsResizing(true);
+    resizeStartRef.current = { x: e.clientX, y: e.clientY, width: size.width, height: size.height, corner: resizeCorner };
+    e.currentTarget.setPointerCapture(e.pointerId);
+  };
+
+  const handleResizePointerMove = (e) => {
+    if (!isResizing) return;
+    const { x, y, width, height, corner } = resizeStartRef.current;
+    const deltaX = e.clientX - x;
+    const deltaY = e.clientY - y;
+
+    const growsRight = corner.endsWith("right");
+    const growsDown = corner.startsWith("bottom");
+
+    const newWidth = width + (growsRight ? deltaX : -deltaX);
+    const newHeight = height + (growsDown ? deltaY : -deltaY);
+
+    const minWidth = 300;
+    const maxWidth = Math.min(560, window.innerWidth - 32);
+    const minHeight = 360;
+    const maxHeight = Math.min(700, window.innerHeight - 32);
+
+    setSize({
+      width: Math.max(minWidth, Math.min(maxWidth, newWidth)),
+      height: Math.max(minHeight, Math.min(maxHeight, newHeight)),
+    });
+  };
+
+  const handleResizePointerUp = (e) => {
+    if (!isResizing) return;
+    setIsResizing(false);
+    e.currentTarget.releasePointerCapture(e.pointerId);
+  };
+
   const timeNow = () => new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 
   const sendMessage = async (overrideText) => {
@@ -157,14 +239,6 @@ export default function AiBubblechat() {
     }
   };
 
-  // Determine dynamic placement based on bubble position relative to screen center
-  const isTopHalf = position.y < window.innerHeight / 2;
-  const isLeftHalf = position.x < window.innerWidth / 2;
-
-  // Dynamic Tailwind positioning classes for the panel
-  const verticalClass = isTopHalf ? "top-16 mt-2" : "bottom-16 mb-2";
-  const horizontalClass = isLeftHalf ? "left-0" : "right-0";
-
   return (
     <div
       style={{
@@ -177,8 +251,16 @@ export default function AiBubblechat() {
       {/* Dynamic Chat Panel */}
       {open && (
         <div
-          className={`absolute ${verticalClass} ${horizontalClass} w-80 sm:w-96 h-[500px] flex flex-col rounded-2xl overflow-hidden shadow-2xl border border-slate-200 bg-white animate-[fadeIn_0.15s_ease-out]`}
+          style={{ width: size.width, height: size.height }}
+          className={`absolute ${verticalClass} ${horizontalClass} flex flex-col rounded-2xl overflow-hidden shadow-2xl border border-slate-200 bg-white animate-[fadeIn_0.15s_ease-out]`}
         >
+          <ResizeHandle
+            corner={resizeCorner}
+            onPointerDown={handleResizePointerDown}
+            onPointerMove={handleResizePointerMove}
+            onPointerUp={handleResizePointerUp}
+          />
+
           <div className="flex items-center justify-between px-4 py-3 bg-[#055E83] text-white">
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center">
@@ -206,19 +288,19 @@ export default function AiBubblechat() {
             <div ref={bottomRef} />
           </div>
 
-          {messages.length === 1 && !sending && (
-            <div className="flex gap-2 overflow-x-auto px-3 pt-2 pb-1 bg-white border-t border-slate-100">
-              {FAQ_SUGGESTIONS.map((q) => (
-                <button
-                  key={q}
-                  onClick={() => sendMessage(q)}
-                  className="shrink-0 text-xs font-medium text-[#055E83] bg-[#EBF4F8] hover:bg-[#DCEAF3] transition-colors px-3 py-1.5 rounded-full whitespace-nowrap"
-                >
-                  {q}
-                </button>
-              ))}
-            </div>
-          )}
+          {/* FAQ suggestions — always available, not just on first open */}
+          <div className="flex gap-2 overflow-x-auto px-3 pt-2 pb-1 bg-white border-t border-slate-100">
+            {FAQ_SUGGESTIONS.map((q) => (
+              <button
+                key={q}
+                onClick={() => sendMessage(q)}
+                disabled={sending}
+                className="shrink-0 text-xs font-medium text-[#055E83] bg-[#EBF4F8] hover:bg-[#DCEAF3] transition-colors px-3 py-1.5 rounded-full whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {q}
+              </button>
+            ))}
+          </div>
 
           <div className="flex items-center gap-2 border-t border-slate-200 px-3 py-2 bg-white">
             <textarea

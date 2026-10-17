@@ -25,6 +25,15 @@ const CATEGORIES = [
 ];
 const STATUSES = ["All Status", "AVAILABLE", "BORROWED", "LOW STOCK", "OUT OF STOCK"];
 
+// Sort options map to the backend's sortBy / sortDir query params.
+// booksController.js whitelists "title" and "added_at" (among others).
+const SORT_OPTIONS = [
+  { value: "title_asc",  label: "Title: A → Z",    sortBy: "title",    sortDir: "asc"  },
+  { value: "title_desc", label: "Title: Z → A",    sortBy: "title",    sortDir: "desc" },
+  { value: "added_desc", label: "Newest → Oldest", sortBy: "added_at", sortDir: "desc" },
+  { value: "added_asc",  label: "Oldest → Newest", sortBy: "added_at", sortDir: "asc"  },
+];
+
 // Same 10 Dewey Decimal main classes as booksController.js's list — kept
 // identical so the form preview always matches what the backend will
 // actually save. The backend is the source of truth; this is a preview.
@@ -145,6 +154,7 @@ export function Inventory() {
   const [category, setCategory] = useState("All Categories");
   const [language, setLanguage] = useState("All Languages");
   const [status, setStatus] = useState("All Status");
+  const [sort, setSort] = useState("title_asc");
 
   const [page, setPage] = useState(1);
   const [totalItems, setTotalItems] = useState(0);
@@ -162,7 +172,7 @@ export function Inventory() {
   useEffect(() => {
     fetchBooks();
     fetchStats();
-  }, [search, category, language, status, page]);
+  }, [search, category, language, status, sort, page]);
 
   const fetchBooks = async () => {
     try {
@@ -172,6 +182,11 @@ export function Inventory() {
       if (category !== "All Categories") params.append("category", category);
       if (language !== "All Languages") params.append("language", language);
       if (status !== "All Status") params.append("status", status);
+
+      const sortOpt = SORT_OPTIONS.find((o) => o.value === sort) || SORT_OPTIONS[0];
+      params.append("sortBy", sortOpt.sortBy);
+      params.append("sortDir", sortOpt.sortDir);
+
       params.append("page", page);
       params.append("limit", PAGE_SIZE);
 
@@ -273,6 +288,18 @@ export function Inventory() {
                 <Filter size={13} className="text-gray-400" />
                 <select value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }} className="text-xs outline-none bg-transparent text-gray-600 font-bold cursor-pointer">
                   {STATUSES.map((s) => <option key={s}>{s}</option>)}
+                </select>
+              </div>
+              <div className={filterPillCls}>
+                <Filter size={13} className="text-gray-400" />
+                <select value={language} onChange={(e) => { setLanguage(e.target.value); setPage(1); }} className="text-xs outline-none bg-transparent text-gray-600 font-bold cursor-pointer">
+                  {LANGUAGES.map((l) => <option key={l}>{l}</option>)}
+                </select>
+              </div>
+              <div className={filterPillCls}>
+                <ArrowUpDown size={13} className="text-gray-400" />
+                <select value={sort} onChange={(e) => { setSort(e.target.value); setPage(1); }} className="text-xs outline-none bg-transparent text-gray-600 font-bold cursor-pointer">
+                  {SORT_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                 </select>
               </div>
             </div>

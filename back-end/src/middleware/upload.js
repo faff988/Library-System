@@ -1,8 +1,8 @@
+require('dotenv').config();
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 
-// Creates an isolated multer instance storing files under uploads/<subfolder>.
 function makeUploader(subfolder, baseUploadsDir) {
   const uploadDir = path.join(baseUploadsDir, subfolder);
   if (!fs.existsSync(uploadDir)) {
@@ -34,25 +34,8 @@ function makeUploader(subfolder, baseUploadsDir) {
   });
 }
 
-// Book covers and event images are served by the WEBSITE backend's
-// express.static('/uploads') mount, not this (system) backend's own
-// server — the two are separate Express apps that share one database
-// but not one filesystem. So these uploaders must write straight into
-// the website backend's uploads/ folder, or images saved here would
-// simply never exist where the public site looks for them.
-//
-// Set WEBSITE_UPLOADS_PATH in this project's .env to the absolute path
-// of the website backend's uploads folder, e.g. on Windows:
-//   WEBSITE_UPLOADS_PATH=C:\Website\back-end\uploads
-// or on Mac/Linux:
-//   WEBSITE_UPLOADS_PATH=/Users/you/Website/back-end/uploads
-//
-// Falls back to this project's own local uploads/ folder (old behavior)
-// if the env var isn't set, so nothing breaks before it's configured —
-// but that fallback WILL keep reproducing the "image doesn't show on
-// the site" bug, so make sure to set it.
 const baseUploadsDir = process.env.WEBSITE_UPLOADS_PATH
-  ? process.env.WEBSITE_UPLOADS_PATH
+  ? path.resolve(process.env.WEBSITE_UPLOADS_PATH)
   : path.join(__dirname, '../../uploads');
 
 if (!process.env.WEBSITE_UPLOADS_PATH) {
@@ -64,6 +47,7 @@ if (!process.env.WEBSITE_UPLOADS_PATH) {
 }
 
 module.exports = {
+  baseUploadsDir,
   uploadBookCover: makeUploader('covers', baseUploadsDir),
   uploadEventImage: makeUploader('events', baseUploadsDir),
 };

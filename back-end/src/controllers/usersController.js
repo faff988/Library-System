@@ -16,15 +16,18 @@ function toPublicUser(user) {
 // be stored as a plain object, not a stringified blob. Accept either shape
 // from the client (Staff.jsx sends an object) and normalize.
 function normalizePermissions(permissions) {
-  if (permissions === null) return null;
+  if (permissions === null || permissions === undefined) return permissions;
   if (typeof permissions === 'string') {
     try {
-      return JSON.parse(permissions);
+      JSON.parse(permissions); // validate only
+      return permissions;
     } catch {
       throw ApiError.badRequest('permissions must be valid JSON');
     }
   }
-  return permissions;
+  // permissions is an object from the client — column is String @db.LongText,
+  // so it must be persisted as a JSON string
+  return JSON.stringify(permissions);
 }
 
 /** GET /api/users?search=&roleId=&isActive=&page=&limit= */

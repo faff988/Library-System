@@ -18,6 +18,11 @@ import {
   Table as TableIcon,
 } from "lucide-react";
 import Navbar from "../../components/Navbar";
+import ExportPreviewModal, {
+  downloadCsvFile,
+  printReport,
+  defaultSelection,
+} from "../../components/Exportpreviewmodal";
 
 const PAGE_SIZE = 5;
 
@@ -47,7 +52,11 @@ function formatDate(value) {
   if (!value) return "--";
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return "--";
-  return d.toLocaleDateString("en-US", { month: "short", day: "2-digit", year: "numeric" });
+  return d.toLocaleDateString("en-US", {
+    month: "short",
+    day: "2-digit",
+    year: "numeric",
+  });
 }
 
 function getDateRangeCutoff(option) {
@@ -69,7 +78,9 @@ function getDateRangeCutoff(option) {
 // always real once selected; `|| null` below is just a safety fallback,
 // not an expected case.
 function normalizeIncident(r) {
-  const reporterName = r.users ? `${r.users.first_name} ${r.users.last_name}`.trim() : "Unknown staff";
+  const reporterName = r.users
+    ? `${r.users.first_name} ${r.users.last_name}`.trim()
+    : "Unknown staff";
   return {
     id: `#REP-${r.report_id ?? "?"}`,
     title: r.books?.title || "Unknown Book",
@@ -84,32 +95,28 @@ function normalizeIncident(r) {
   };
 }
 
-function escapeCsvValue(value) {
-  return `"${String(value).replace(/"/g, '""')}"`;
-}
-
-function downloadCsv(rows) {
-  const headers = ["Report ID", "Book Title", "Dewey Code", "Category", "Condition", "Reported By", "Member", "Reported Date"];
-  const csvRows = rows.map((row) => [
-    row.id,
-    row.title,
-    row.dewey,
-    row.category || "Uncategorized",
-    row.type,
-    row.reportedBy,
-    row.memberName || "--",
-    row.reportedDate,
-  ]);
-  const csv = [headers, ...csvRows].map((row) => row.map(escapeCsvValue).join(",")).join("\n");
-  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-
-  link.href = url;
-  link.download = "lost-damaged-report.csv";
-  link.click();
-  URL.revokeObjectURL(url);
-}
+// Column list the export preview modal picks from - labels match the old
+// CSV headers 1:1, so the default (all-checked) export is unchanged.
+const EXPORT_COLUMNS = [
+  { key: "id", label: "Report ID" },
+  { key: "title", label: "Book Title" },
+  { key: "dewey", label: "Dewey Code" },
+  {
+    key: "category",
+    label: "Category",
+    csvValue: (row) => row.category || "Uncategorized",
+    render: (row) => row.category || "Uncategorized",
+  },
+  { key: "type", label: "Condition" },
+  { key: "reportedBy", label: "Reported By" },
+  {
+    key: "memberName",
+    label: "Member",
+    csvValue: (row) => row.memberName || "--",
+    render: (row) => row.memberName || "--",
+  },
+  { key: "reportedDate", label: "Reported Date" },
+];
 
 function getStatusClass(type) {
   const classes = {
@@ -127,7 +134,12 @@ function computeMonthlyTrend(rows) {
   const buckets = [];
   for (let i = 5; i >= 0; i--) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    buckets.push({ key: `${d.getFullYear()}-${d.getMonth()}`, month: d.toLocaleDateString("en-US", { month: "short" }), lost: 0, damaged: 0 });
+    buckets.push({
+      key: `${d.getFullYear()}-${d.getMonth()}`,
+      month: d.toLocaleDateString("en-US", { month: "short" }),
+      lost: 0,
+      damaged: 0,
+    });
   }
   const bucketMap = new Map(buckets.map((b) => [b.key, b]));
 
@@ -151,12 +163,16 @@ function computeRiskAlerts(rows) {
   const damagedCounts = new Map();
 
   rows.forEach((r) => {
-    if (r.type === "Lost") lostCounts.set(r.title, (lostCounts.get(r.title) || 0) + 1);
-    if (r.type === "Damaged") damagedCounts.set(r.title, (damagedCounts.get(r.title) || 0) + 1);
+    if (r.type === "Lost")
+      lostCounts.set(r.title, (lostCounts.get(r.title) || 0) + 1);
+    if (r.type === "Damaged")
+      damagedCounts.set(r.title, (damagedCounts.get(r.title) || 0) + 1);
   });
 
   const topLost = [...lostCounts.entries()].sort((a, b) => b[1] - a[1])[0];
-  const topDamaged = [...damagedCounts.entries()].sort((a, b) => b[1] - a[1])[0];
+  const topDamaged = [...damagedCounts.entries()].sort(
+    (a, b) => b[1] - a[1],
+  )[0];
   const mostRecent = rows[0];
 
   const alerts = [];
@@ -188,18 +204,27 @@ function StatCard({ card }) {
   return (
     <div className="rounded-lg border border-gray-100 bg-white p-4 shadow-sm">
       <div className="flex items-start justify-between gap-3">
-        <div className={`flex h-8 w-8 items-center justify-center rounded-md ${card.iconClass}`}>
+        <div
+          className={`flex h-8 w-8 items-center justify-center rounded-md ${card.iconClass}`}
+        >
           <card.icon size={17} />
         </div>
       </div>
-      <p className="mt-4 text-[11px] font-extrabold uppercase text-gray-500">{card.label}</p>
-      <h3 className="mt-1 text-2xl font-extrabold tracking-normal text-[#1B4965]">{card.value}</h3>
+      <p className="mt-4 text-[11px] font-extrabold uppercase text-gray-500">
+        {card.label}
+      </p>
+      <h3 className="mt-1 text-2xl font-extrabold tracking-normal text-[#1B4965]">
+        {card.value}
+      </h3>
     </div>
   );
 }
 
 function TrendChart({ data }) {
-  const maxValue = Math.max(...data.flatMap((point) => [point.lost, point.damaged]), 1);
+  const maxValue = Math.max(
+    ...data.flatMap((point) => [point.lost, point.damaged]),
+    1,
+  );
   const width = 600;
   const height = 190;
   const paddingX = 28;
@@ -213,13 +238,19 @@ function TrendChart({ data }) {
     return `${x},${y}`;
   };
 
-  const lostPath = data.map((point, index) => getPoint(point.lost, index)).join(" ");
-  const damagedPath = data.map((point, index) => getPoint(point.damaged, index)).join(" ");
+  const lostPath = data
+    .map((point, index) => getPoint(point.lost, index))
+    .join(" ");
+  const damagedPath = data
+    .map((point, index) => getPoint(point.damaged, index))
+    .join(" ");
 
   return (
     <div className="rounded-lg border border-gray-100 bg-white p-5 shadow-sm">
       <div className="flex items-start justify-between gap-4">
-        <h2 className="text-base font-extrabold text-gray-800">Monthly Trend</h2>
+        <h2 className="text-base font-extrabold text-gray-800">
+          Monthly Trend
+        </h2>
         <div className="flex items-center gap-4 text-[11px] font-bold text-gray-500">
           <span className="flex items-center gap-1.5">
             <span className="h-2 w-2 rounded-full bg-[#006088]" />
@@ -233,21 +264,59 @@ function TrendChart({ data }) {
       </div>
 
       <div className="mt-4 overflow-hidden rounded-md bg-white">
-        <svg viewBox={`0 0 ${width} ${height}`} className="h-56 w-full" role="img" aria-label="Lost and damaged monthly trend">
+        <svg
+          viewBox={`0 0 ${width} ${height}`}
+          className="h-56 w-full"
+          role="img"
+          aria-label="Lost and damaged monthly trend"
+        >
           {[0, 1, 2, 3].map((line) => {
             const y = paddingY + (chartHeight / 3) * line;
-            return <line key={line} x1={paddingX} x2={width - paddingX} y1={y} y2={y} stroke="#EEF2F6" strokeWidth="1" />;
+            return (
+              <line
+                key={line}
+                x1={paddingX}
+                x2={width - paddingX}
+                y1={y}
+                y2={y}
+                stroke="#EEF2F6"
+                strokeWidth="1"
+              />
+            );
           })}
-          <polyline points={lostPath} fill="none" stroke="#006088" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-          <polyline points={damagedPath} fill="none" stroke="#F5C842" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+          <polyline
+            points={lostPath}
+            fill="none"
+            stroke="#006088"
+            strokeWidth="3"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+          <polyline
+            points={damagedPath}
+            fill="none"
+            stroke="#F5C842"
+            strokeWidth="3"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
           {data.map((point, index) => {
             const [lostX, lostY] = getPoint(point.lost, index).split(",");
-            const [damagedX, damagedY] = getPoint(point.damaged, index).split(",");
+            const [damagedX, damagedY] = getPoint(point.damaged, index).split(
+              ",",
+            );
             return (
               <g key={point.key}>
                 <circle cx={lostX} cy={lostY} r="4" fill="#006088" />
                 <circle cx={damagedX} cy={damagedY} r="4" fill="#F5C842" />
-                <text x={lostX} y={height - 3} textAnchor="middle" fontSize="10" fontWeight="700" fill="#475569">
+                <text
+                  x={lostX}
+                  y={height - 3}
+                  textAnchor="middle"
+                  fontSize="10"
+                  fontWeight="700"
+                  fill="#475569"
+                >
                   {point.month}
                 </text>
               </g>
@@ -264,14 +333,23 @@ function RiskAlerts({ alerts, loading }) {
     <aside className="rounded-lg border border-gray-100 bg-white p-5 shadow-sm">
       <div className="flex items-center gap-2">
         <AlertCircle size={18} className="text-red-500" />
-        <h2 className="text-base font-extrabold text-gray-800">Incident Insights</h2>
+        <h2 className="text-base font-extrabold text-gray-800">
+          Incident Insights
+        </h2>
       </div>
 
       <div className="mt-4 space-y-3">
         {alerts.map((alert) => (
-          <div key={alert.title} className={`rounded-md border-l-4 p-3 ${alert.className}`}>
-            <p className="text-[11px] font-extrabold uppercase">{alert.title}</p>
-            <p className="mt-1 text-xs font-semibold leading-5 text-gray-700">{alert.detail}</p>
+          <div
+            key={alert.title}
+            className={`rounded-md border-l-4 p-3 ${alert.className}`}
+          >
+            <p className="text-[11px] font-extrabold uppercase">
+              {alert.title}
+            </p>
+            <p className="mt-1 text-xs font-semibold leading-5 text-gray-700">
+              {alert.detail}
+            </p>
           </div>
         ))}
         {!alerts.length && (
@@ -286,7 +364,9 @@ function RiskAlerts({ alerts, loading }) {
 
 function StatusBadge({ type }) {
   return (
-    <span className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-extrabold uppercase ${getStatusClass(type)}`}>
+    <span
+      className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-extrabold uppercase ${getStatusClass(type)}`}
+    >
       {type}
     </span>
   );
@@ -294,7 +374,12 @@ function StatusBadge({ type }) {
 
 export default function LostDamagedReport() {
   const [rows, setRows] = useState([]);
-  const [summary, setSummary] = useState({ total: 0, damaged: 0, fair: 0, lost: 0 });
+  const [summary, setSummary] = useState({
+    total: 0,
+    damaged: 0,
+    fair: 0,
+    lost: 0,
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -305,6 +390,37 @@ export default function LostDamagedReport() {
   const [categoryFilter, setCategoryFilter] = useState("All");
   const [currentPage, setCurrentPage] = useState(1);
 
+  // Export preview modal: null when closed, otherwise { type: 'csv' | 'pdf' }
+  const [exportModal, setExportModal] = useState(null);
+  const [exportSelection, setExportSelection] = useState(() =>
+    defaultSelection(EXPORT_COLUMNS),
+  );
+
+  const toggleExportColumn = (key) =>
+    setExportSelection((prev) => ({ ...prev, [key]: !prev[key] }));
+  const setAllExportColumns = (checked) =>
+    setExportSelection(
+      EXPORT_COLUMNS.reduce((acc, col) => ({ ...acc, [col.key]: checked }), {}),
+    );
+
+  const confirmExport = () => {
+    if (!exportModal) return;
+    if (exportModal.type === "csv") {
+      downloadCsvFile(
+        filteredIncidents,
+        EXPORT_COLUMNS,
+        exportSelection,
+        "lost-damaged-report.csv",
+      );
+    } else {
+      printReport(filteredIncidents, EXPORT_COLUMNS, exportSelection, {
+        title: "Lost or Damaged Book Report",
+        brandColor: "#1B4965",
+      });
+    }
+    setExportModal(null);
+  };
+
   const loadReport = useCallback(async () => {
     setLoading(true);
     setError("");
@@ -314,7 +430,9 @@ export default function LostDamagedReport() {
       // computed server-side (total/damaged/fair/lost).
       const json = await apiFetch("/reports/lost-damaged");
       setRows((json.data?.rows || []).map(normalizeIncident));
-      setSummary(json.data?.summary || { total: 0, damaged: 0, fair: 0, lost: 0 });
+      setSummary(
+        json.data?.summary || { total: 0, damaged: 0, fair: 0, lost: 0 },
+      );
     } catch (err) {
       setError(err.message || "Unable to load lost/damaged report.");
     } finally {
@@ -326,7 +444,10 @@ export default function LostDamagedReport() {
     loadReport();
   }, [loadReport]);
 
-  const typeOptions = useMemo(() => Array.from(new Set(rows.map((r) => r.type))).sort(), [rows]);
+  const typeOptions = useMemo(
+    () => Array.from(new Set(rows.map((r) => r.type))).sort(),
+    [rows],
+  );
   const categories = useMemo(
     () => ["All", ...new Set(rows.map((r) => r.category || "Uncategorized"))],
     [rows],
@@ -338,29 +459,67 @@ export default function LostDamagedReport() {
     const cutoff = getDateRangeCutoff(dateRange);
 
     return rows.filter((incident) => {
-      const searchableText = `${incident.id} ${incident.title} ${incident.dewey} ${incident.category || ""} ${incident.type} ${incident.reportedBy}`.toLowerCase();
-      const matchesHeader = !headerQuery || searchableText.includes(headerQuery);
+      const searchableText =
+        `${incident.id} ${incident.title} ${incident.dewey} ${incident.category || ""} ${incident.type} ${incident.reportedBy}`.toLowerCase();
+      const matchesHeader =
+        !headerQuery || searchableText.includes(headerQuery);
       const matchesTable = !tableQuery || searchableText.includes(tableQuery);
       const matchesType = typeFilter === "All" || incident.type === typeFilter;
-      const matchesCategory = categoryFilter === "All" || (incident.category || "Uncategorized") === categoryFilter;
-      const matchesDate = !incident.reportedDateRaw || new Date(incident.reportedDateRaw) >= cutoff;
+      const matchesCategory =
+        categoryFilter === "All" ||
+        (incident.category || "Uncategorized") === categoryFilter;
+      const matchesDate =
+        !incident.reportedDateRaw ||
+        new Date(incident.reportedDateRaw) >= cutoff;
 
-      return matchesHeader && matchesTable && matchesType && matchesCategory && matchesDate;
+      return (
+        matchesHeader &&
+        matchesTable &&
+        matchesType &&
+        matchesCategory &&
+        matchesDate
+      );
     });
   }, [rows, categoryFilter, dateRange, headerSearch, tableSearch, typeFilter]);
 
-  const pageCount = Math.max(1, Math.ceil(filteredIncidents.length / PAGE_SIZE));
+  const pageCount = Math.max(
+    1,
+    Math.ceil(filteredIncidents.length / PAGE_SIZE),
+  );
   const safePage = Math.min(currentPage, pageCount);
-  const visibleIncidents = filteredIncidents.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+  const visibleIncidents = filteredIncidents.slice(
+    (safePage - 1) * PAGE_SIZE,
+    safePage * PAGE_SIZE,
+  );
 
   const monthlyTrend = useMemo(() => computeMonthlyTrend(rows), [rows]);
   const riskAlerts = useMemo(() => computeRiskAlerts(rows), [rows]);
 
   const summaryCards = [
-    { label: "Total Reports", value: summary.total, icon: ClipboardList, iconClass: "bg-[#E7F4FA] text-[#006088]" },
-    { label: "Lost", value: summary.lost, icon: BookX, iconClass: "bg-red-50 text-red-500" },
-    { label: "Damaged", value: summary.damaged, icon: AlertTriangle, iconClass: "bg-[#FFF2C7] text-[#8A6500]" },
-    { label: "Fair Condition", value: summary.fair, icon: CheckCircle2, iconClass: "bg-emerald-50 text-emerald-600" },
+    {
+      label: "Total Reports",
+      value: summary.total,
+      icon: ClipboardList,
+      iconClass: "bg-[#E7F4FA] text-[#006088]",
+    },
+    {
+      label: "Lost",
+      value: summary.lost,
+      icon: BookX,
+      iconClass: "bg-red-50 text-red-500",
+    },
+    {
+      label: "Damaged",
+      value: summary.damaged,
+      icon: AlertTriangle,
+      iconClass: "bg-[#FFF2C7] text-[#8A6500]",
+    },
+    {
+      label: "Fair Condition",
+      value: summary.fair,
+      icon: CheckCircle2,
+      iconClass: "bg-emerald-50 text-emerald-600",
+    },
   ];
 
   const handleFilterChange = (setter) => (event) => {
@@ -378,279 +537,339 @@ export default function LostDamagedReport() {
 
   return (
     <div className="flex min-w-0 flex-1 flex-col bg-[#E9EEF4]">
-        <Navbar
-          title="Lost or Damaged Book Report"
-          breadcrumb="Reports"
-          onBack={() => window.history.back()}
-          searchValue={headerSearch}
-          onSearchChange={setHeaderSearch}
-          searchPlaceholder="Search books, member..."
-        />
+      <Navbar
+        title="Lost or Damaged Book Report"
+        breadcrumb="Reports"
+        onBack={() => window.history.back()}
+        searchValue={headerSearch}
+        onSearchChange={setHeaderSearch}
+        searchPlaceholder="Search books, member..."
+      />
 
-        <main className="flex-1 p-4 md:p-6 lg:p-8">
-          {error && (
-            <div className="mb-4 flex items-center justify-between rounded-md border border-red-200 bg-red-50 px-4 py-3 text-xs font-bold text-red-600">
-              <span>{error}</span>
-              <button type="button" onClick={loadReport} className="rounded-md bg-red-600 px-3 py-1.5 text-white">
-                Retry
-              </button>
-            </div>
-          )}
-
-          <div className="mb-4 flex justify-end">
+      <main className="flex-1 p-4 md:p-6 lg:p-8">
+        {error && (
+          <div className="mb-4 flex items-center justify-between rounded-md border border-red-200 bg-red-50 px-4 py-3 text-xs font-bold text-red-600">
+            <span>{error}</span>
             <button
               type="button"
               onClick={loadReport}
-              disabled={loading}
-              className="inline-flex h-9 items-center gap-2 rounded-md border border-gray-200 bg-white px-3 text-[11px] font-bold text-gray-600 shadow-sm transition hover:bg-gray-50 disabled:opacity-50"
+              className="rounded-md bg-red-600 px-3 py-1.5 text-white"
             >
-              {loading ? <Loader2 size={14} className="animate-spin" /> : <RefreshCcw size={14} />}
-              {loading ? "Loading..." : "Refresh"}
+              Retry
             </button>
           </div>
+        )}
 
-          <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            {summaryCards.map((card) => (
-              <StatCard key={card.label} card={card} />
-            ))}
-          </section>
+        <div className="mb-4 flex justify-end">
+          <button
+            type="button"
+            onClick={loadReport}
+            disabled={loading}
+            className="inline-flex h-9 items-center gap-2 rounded-md border border-gray-200 bg-white px-3 text-[11px] font-bold text-gray-600 shadow-sm transition hover:bg-gray-50 disabled:opacity-50"
+          >
+            {loading ? (
+              <Loader2 size={14} className="animate-spin" />
+            ) : (
+              <RefreshCcw size={14} />
+            )}
+            {loading ? "Loading..." : "Refresh"}
+          </button>
+        </div>
 
-          <section className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_260px]">
-            <TrendChart data={monthlyTrend} />
-            <RiskAlerts alerts={riskAlerts} loading={loading} />
-          </section>
+        <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          {summaryCards.map((card) => (
+            <StatCard key={card.label} card={card} />
+          ))}
+        </section>
 
-          <section className="mt-6 flex flex-col gap-4">
-            <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-              <div className="flex flex-col gap-3 md:flex-row md:flex-wrap">
-                <label className="relative">
-                  <Calendar
-                    size={15}
-                    className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
-                  />
-                  <select
-                    value={dateRange}
-                    onChange={handleFilterChange(setDateRange)}
-                    className="h-10 min-w-40 appearance-none rounded-md border border-gray-200 bg-white pl-9 pr-8 text-xs font-bold text-gray-600 outline-none transition focus:border-[#1B4965]"
-                  >
-                    <option>Last 30 Days</option>
-                    <option>Last 90 Days</option>
-                    <option>This Year</option>
-                  </select>
-                </label>
+        <section className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_260px]">
+          <TrendChart data={monthlyTrend} />
+          <RiskAlerts alerts={riskAlerts} loading={loading} />
+        </section>
 
-                <label className="relative">
-                  <BookX
-                    size={15}
-                    className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
-                  />
-                  <select
-                    value={typeFilter}
-                    onChange={handleFilterChange(setTypeFilter)}
-                    className="h-10 min-w-44 appearance-none rounded-md border border-gray-200 bg-white pl-9 pr-8 text-xs font-bold text-gray-600 outline-none transition focus:border-[#1B4965]"
-                  >
-                    <option value="All">Condition: All</option>
-                    {typeOptions.map((type) => (
-                      <option key={type} value={type}>
-                        {type}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="relative">
-                  <Search
-                    size={15}
-                    className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
-                  />
-                  <input
-                    type="search"
-                    value={tableSearch}
-                    onChange={handleFilterChange(setTableSearch)}
-                    placeholder="Search reports"
-                    className="h-10 min-w-48 rounded-md border border-gray-200 bg-white pl-9 pr-3 text-xs font-bold text-gray-600 outline-none transition focus:border-[#1B4965]"
-                  />
-                </label>
-
-                <label className="relative">
-                  <AlertCircle
-                    size={15}
-                    className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
-                  />
-                  <select
-                    value={categoryFilter}
-                    onChange={handleFilterChange(setCategoryFilter)}
-                    className="h-10 min-w-44 appearance-none rounded-md border border-gray-200 bg-white pl-9 pr-8 text-xs font-bold text-gray-600 outline-none transition focus:border-[#1B4965]"
-                  >
-                    {categories.map((category) => (
-                      <option key={category} value={category}>
-                        {category === "All" ? "Category: All" : category}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <button
-                  type="button"
-                  onClick={resetFilters}
-                  className="inline-flex h-10 items-center gap-2 rounded-md bg-white px-3 text-xs font-bold text-[#006088] shadow-sm transition hover:bg-[#E6F4F7]"
+        <section className="mt-6 flex flex-col gap-4">
+          <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+            <div className="flex flex-col gap-3 md:flex-row md:flex-wrap">
+              <label className="relative">
+                <Calendar
+                  size={15}
+                  className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+                />
+                <select
+                  value={dateRange}
+                  onChange={handleFilterChange(setDateRange)}
+                  className="h-10 min-w-40 appearance-none rounded-md border border-gray-200 bg-white pl-9 pr-8 text-xs font-bold text-gray-600 outline-none transition focus:border-[#1B4965]"
                 >
-                  <RotateCcw size={15} />
-                  Reset
-                </button>
-              </div>
+                  <option>Last 30 Days</option>
+                  <option>Last 90 Days</option>
+                  <option>This Year</option>
+                </select>
+              </label>
 
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => window.print()}
-                  className="inline-flex h-10 items-center gap-2 rounded-md border border-gray-200 bg-white px-4 text-xs font-bold text-gray-600 transition hover:bg-gray-50"
+              <label className="relative">
+                <BookX
+                  size={15}
+                  className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+                />
+                <select
+                  value={typeFilter}
+                  onChange={handleFilterChange(setTypeFilter)}
+                  className="h-10 min-w-44 appearance-none rounded-md border border-gray-200 bg-white pl-9 pr-8 text-xs font-bold text-gray-600 outline-none transition focus:border-[#1B4965]"
                 >
-                  <FileDown size={15} />
-                  PDF
-                </button>
-                <button
-                  type="button"
-                  onClick={() => downloadCsv(filteredIncidents)}
-                  className="inline-flex h-10 items-center gap-2 rounded-md border border-gray-200 bg-white px-4 text-xs font-bold text-gray-600 transition hover:bg-gray-50"
-                >
-                  <TableIcon size={15} />
-                  Excel
-                </button>
-                <button
-                  type="button"
-                  onClick={() => window.print()}
-                  className="inline-flex h-10 items-center gap-2 rounded-md bg-[#1B4965] px-4 text-xs font-extrabold text-white shadow-sm transition hover:bg-[#14374d]"
-                >
-                  <Printer size={15} />
-                  Print Report
-                </button>
-              </div>
-            </div>
-          </section>
+                  <option value="All">Condition: All</option>
+                  {typeOptions.map((type) => (
+                    <option key={type} value={type}>
+                      {type}
+                    </option>
+                  ))}
+                </select>
+              </label>
 
-          <section className="mt-6 overflow-hidden rounded-lg border border-gray-100 bg-white shadow-sm">
-            <div className="flex flex-col gap-2 border-b border-gray-100 p-5 sm:flex-row sm:items-center sm:justify-between">
-              <h2 className="text-base font-extrabold text-gray-800">Detailed Incident Logs</h2>
-              <p className="text-xs font-semibold text-gray-500">
-                Showing {visibleIncidents.length ? (safePage - 1) * PAGE_SIZE + 1 : 0}-
-                {Math.min(safePage * PAGE_SIZE, filteredIncidents.length)} of{" "}
-                {filteredIncidents.length} reports
-              </p>
+              <label className="relative">
+                <Search
+                  size={15}
+                  className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+                />
+                <input
+                  type="search"
+                  value={tableSearch}
+                  onChange={handleFilterChange(setTableSearch)}
+                  placeholder="Search reports"
+                  className="h-10 min-w-48 rounded-md border border-gray-200 bg-white pl-9 pr-3 text-xs font-bold text-gray-600 outline-none transition focus:border-[#1B4965]"
+                />
+              </label>
+
+              <label className="relative">
+                <AlertCircle
+                  size={15}
+                  className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+                />
+                <select
+                  value={categoryFilter}
+                  onChange={handleFilterChange(setCategoryFilter)}
+                  className="h-10 min-w-44 appearance-none rounded-md border border-gray-200 bg-white pl-9 pr-8 text-xs font-bold text-gray-600 outline-none transition focus:border-[#1B4965]"
+                >
+                  {categories.map((category) => (
+                    <option key={category} value={category}>
+                      {category === "All" ? "Category: All" : category}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <button
+                type="button"
+                onClick={resetFilters}
+                className="inline-flex h-10 items-center gap-2 rounded-md bg-white px-3 text-xs font-bold text-[#006088] shadow-sm transition hover:bg-[#E6F4F7]"
+              >
+                <RotateCcw size={15} />
+                Reset
+              </button>
             </div>
 
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[850px] text-left">
-                <thead className="bg-[#F1F6FA] text-[11px] uppercase tracking-wide text-gray-500">
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                disabled={filteredIncidents.length === 0}
+                onClick={() => setExportModal({ type: "pdf" })}
+                className="inline-flex h-10 items-center gap-2 rounded-md border border-gray-200 bg-white px-4 text-xs font-bold text-gray-600 transition hover:bg-gray-50 disabled:opacity-50"
+              >
+                <FileDown size={15} />
+                PDF
+              </button>
+              <button
+                type="button"
+                disabled={filteredIncidents.length === 0}
+                onClick={() => setExportModal({ type: "csv" })}
+                className="inline-flex h-10 items-center gap-2 rounded-md border border-gray-200 bg-white px-4 text-xs font-bold text-gray-600 transition hover:bg-gray-50 disabled:opacity-50"
+              >
+                <TableIcon size={15} />
+                Excel
+              </button>
+              <button
+                type="button"
+                disabled={filteredIncidents.length === 0}
+                onClick={() => setExportModal({ type: "pdf" })}
+                className="inline-flex h-10 items-center gap-2 rounded-md bg-[#1B4965] px-4 text-xs font-extrabold text-white shadow-sm transition hover:bg-[#14374d] disabled:opacity-50"
+              >
+                <Printer size={15} />
+                Print Report
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <section className="mt-6 overflow-hidden rounded-lg border border-gray-100 bg-white shadow-sm">
+          <div className="flex flex-col gap-2 border-b border-gray-100 p-5 sm:flex-row sm:items-center sm:justify-between">
+            <h2 className="text-base font-extrabold text-gray-800">
+              Detailed Incident Logs
+            </h2>
+            <p className="text-xs font-semibold text-gray-500">
+              Showing{" "}
+              {visibleIncidents.length ? (safePage - 1) * PAGE_SIZE + 1 : 0}-
+              {Math.min(safePage * PAGE_SIZE, filteredIncidents.length)} of{" "}
+              {filteredIncidents.length} reports
+            </p>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[850px] text-left">
+              <thead className="bg-[#F1F6FA] text-[11px] uppercase tracking-wide text-gray-500">
+                <tr>
+                  <th className="px-5 py-4 font-extrabold">Report ID</th>
+                  <th className="px-5 py-4 font-extrabold">Book Details</th>
+                  <th className="px-5 py-4 font-extrabold">Category</th>
+                  <th className="px-5 py-4 text-center font-extrabold">
+                    Condition
+                  </th>
+                  <th className="px-5 py-4 font-extrabold">Reported By</th>
+                  <th className="px-5 py-4 font-extrabold">Reported Date</th>
+                  <th className="px-5 py-4 w-12" />
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100 text-sm">
+                {loading && !rows.length && (
                   <tr>
-                    <th className="px-5 py-4 font-extrabold">Report ID</th>
-                    <th className="px-5 py-4 font-extrabold">Book Details</th>
-                    <th className="px-5 py-4 font-extrabold">Category</th>
-                    <th className="px-5 py-4 text-center font-extrabold">Condition</th>
-                    <th className="px-5 py-4 font-extrabold">Reported By</th>
-                    <th className="px-5 py-4 font-extrabold">Reported Date</th>
-                    <th className="px-5 py-4 w-12" />
+                    <td colSpan={7} className="px-5 py-16 text-center">
+                      <Loader2
+                        size={20}
+                        className="mx-auto animate-spin text-[#1B4965]"
+                      />
+                      <p className="mt-2 text-xs font-bold text-gray-400">
+                        Loading incident reports...
+                      </p>
+                    </td>
                   </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100 text-sm">
-                  {loading && !rows.length && (
-                    <tr>
-                      <td colSpan={7} className="px-5 py-16 text-center">
-                        <Loader2 size={20} className="mx-auto animate-spin text-[#1B4965]" />
-                        <p className="mt-2 text-xs font-bold text-gray-400">Loading incident reports...</p>
-                      </td>
-                    </tr>
-                  )}
+                )}
 
-                  {!loading &&
-                    visibleIncidents.map((incident) => (
-                      <tr key={incident.id} className="transition hover:bg-[#F8FAFC]">
-                        <td className="px-5 py-4 text-xs font-extrabold text-[#006088]">{incident.id}</td>
-                        <td className="px-5 py-4">
-                          <p className="font-extrabold leading-tight text-gray-900">{incident.title}</p>
-                          <p className="mt-1 text-xs font-semibold text-gray-400">Dewey: {incident.dewey}</p>
-                        </td>
-                        <td className="px-5 py-4">
-                          <span className="rounded-full bg-gray-100 px-2.5 py-1 text-[11px] font-bold text-gray-600">
-                            {incident.category || "Uncategorized"}
-                          </span>
-                        </td>
-                        <td className="px-5 py-4 text-center">
-                          <StatusBadge type={incident.type} />
-                        </td>
-                        <td className="px-5 py-4">
-                          <p className="font-bold text-gray-700">{incident.reportedBy}</p>
-                          {incident.memberName && (
-                            <p className="mt-1 text-xs font-semibold text-gray-400">For: {incident.memberName}</p>
-                          )}
-                        </td>
-                        <td className="px-5 py-4 text-xs font-semibold text-gray-500">{incident.reportedDate}</td>
-                        <td className="px-5 py-4 text-center">
-                          <button
-                            type="button"
-                            onClick={() =>
-                              window.alert(`${incident.title} - ${incident.type}, reported ${incident.reportedDate}`)
-                            }
-                            className="inline-flex h-8 w-8 items-center justify-center rounded-md text-gray-400 transition hover:bg-gray-100 hover:text-gray-600"
-                            aria-label={`View details for ${incident.title}`}
-                          >
-                            <MoreVertical size={16} />
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-
-                  {!loading && visibleIncidents.length === 0 && (
-                    <tr>
-                      <td colSpan={7} className="px-5 py-10 text-center text-sm font-semibold text-gray-400">
-                        No lost or damaged reports found.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-
-            <div className="flex flex-col gap-3 border-t border-gray-100 p-5 sm:flex-row sm:items-center sm:justify-between">
-              <button
-                type="button"
-                onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
-                className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-gray-200 bg-white px-4 text-xs font-bold text-gray-600 transition hover:bg-gray-50"
-              >
-                <ChevronLeft size={15} />
-                Previous
-              </button>
-
-              <div className="flex items-center justify-center gap-2 text-xs font-bold text-gray-500">
-                {Array.from({ length: pageCount }).map((_, index) => {
-                  const page = index + 1;
-
-                  return (
-                    <button
-                      type="button"
-                      key={page}
-                      onClick={() => setCurrentPage(page)}
-                      className={`flex h-8 w-8 items-center justify-center rounded-md transition ${
-                        safePage === page ? "bg-[#1B4965] text-white" : "text-gray-500 hover:bg-gray-100"
-                      }`}
+                {!loading &&
+                  visibleIncidents.map((incident) => (
+                    <tr
+                      key={incident.id}
+                      className="transition hover:bg-[#F8FAFC]"
                     >
-                      {page}
-                    </button>
-                  );
-                })}
-              </div>
+                      <td className="px-5 py-4 text-xs font-extrabold text-[#006088]">
+                        {incident.id}
+                      </td>
+                      <td className="px-5 py-4">
+                        <p className="font-extrabold leading-tight text-gray-900">
+                          {incident.title}
+                        </p>
+                        <p className="mt-1 text-xs font-semibold text-gray-400">
+                          Dewey: {incident.dewey}
+                        </p>
+                      </td>
+                      <td className="px-5 py-4">
+                        <span className="rounded-full bg-gray-100 px-2.5 py-1 text-[11px] font-bold text-gray-600">
+                          {incident.category || "Uncategorized"}
+                        </span>
+                      </td>
+                      <td className="px-5 py-4 text-center">
+                        <StatusBadge type={incident.type} />
+                      </td>
+                      <td className="px-5 py-4">
+                        <p className="font-bold text-gray-700">
+                          {incident.reportedBy}
+                        </p>
+                        {incident.memberName && (
+                          <p className="mt-1 text-xs font-semibold text-gray-400">
+                            For: {incident.memberName}
+                          </p>
+                        )}
+                      </td>
+                      <td className="px-5 py-4 text-xs font-semibold text-gray-500">
+                        {incident.reportedDate}
+                      </td>
+                      <td className="px-5 py-4 text-center">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            window.alert(
+                              `${incident.title} - ${incident.type}, reported ${incident.reportedDate}`,
+                            )
+                          }
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-md text-gray-400 transition hover:bg-gray-100 hover:text-gray-600"
+                          aria-label={`View details for ${incident.title}`}
+                        >
+                          <MoreVertical size={16} />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
 
-              <button
-                type="button"
-                onClick={() => setCurrentPage((page) => Math.min(pageCount, page + 1))}
-                className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-gray-200 bg-white px-4 text-xs font-bold text-gray-600 transition hover:bg-gray-50"
-              >
-                Next
-                <ChevronRight size={15} />
-              </button>
+                {!loading && visibleIncidents.length === 0 && (
+                  <tr>
+                    <td
+                      colSpan={7}
+                      className="px-5 py-10 text-center text-sm font-semibold text-gray-400"
+                    >
+                      No lost or damaged reports found.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="flex flex-col gap-3 border-t border-gray-100 p-5 sm:flex-row sm:items-center sm:justify-between">
+            <button
+              type="button"
+              onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+              className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-gray-200 bg-white px-4 text-xs font-bold text-gray-600 transition hover:bg-gray-50"
+            >
+              <ChevronLeft size={15} />
+              Previous
+            </button>
+
+            <div className="flex items-center justify-center gap-2 text-xs font-bold text-gray-500">
+              {Array.from({ length: pageCount }).map((_, index) => {
+                const page = index + 1;
+
+                return (
+                  <button
+                    type="button"
+                    key={page}
+                    onClick={() => setCurrentPage(page)}
+                    className={`flex h-8 w-8 items-center justify-center rounded-md transition ${
+                      safePage === page
+                        ? "bg-[#1B4965] text-white"
+                        : "text-gray-500 hover:bg-gray-100"
+                    }`}
+                  >
+                    {page}
+                  </button>
+                );
+              })}
             </div>
-          </section>
-        </main>
-      </div>
+
+            <button
+              type="button"
+              onClick={() =>
+                setCurrentPage((page) => Math.min(pageCount, page + 1))
+              }
+              className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-gray-200 bg-white px-4 text-xs font-bold text-gray-600 transition hover:bg-gray-50"
+            >
+              Next
+              <ChevronRight size={15} />
+            </button>
+          </div>
+        </section>
+      </main>
+
+      {exportModal && (
+        <ExportPreviewModal
+          type={exportModal.type}
+          rows={filteredIncidents}
+          columns={EXPORT_COLUMNS}
+          selection={exportSelection}
+          onToggleColumn={toggleExportColumn}
+          onSelectAll={setAllExportColumns}
+          onClose={() => setExportModal(null)}
+          onConfirm={confirmExport}
+          getRowKey={(row) => row.id}
+          brandColor="#1B4965"
+        />
+      )}
+    </div>
   );
 }

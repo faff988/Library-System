@@ -3,6 +3,8 @@ const path = require('path');
 const fs = require('fs');
 const prisma = require('../lib/prisma');
 
+const { baseUploadsDir } = require('../middleware/upload');
+
 // Must match the `events_event_category` enum in schema.prisma
 const EVENT_CATEGORIES = ['discussion', 'special', 'children', 'workshop'];
 
@@ -40,8 +42,7 @@ function serializeEvent(event) {
 
 function deleteEventImageFile(filename) {
   if (!filename) return;
-  // back-end/src/controllers -> back-end/src -> back-end -> uploads/events
-  const filePath = path.join(__dirname, '../../uploads/events', filename);
+  const filePath = path.join(baseUploadsDir, 'events', filename);
   fs.unlink(filePath, (err) => {
     if (err && err.code !== 'ENOENT') {
       console.warn('⚠️ Failed to delete event image file:', filePath, err.message);

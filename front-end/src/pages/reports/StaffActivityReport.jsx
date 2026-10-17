@@ -17,6 +17,11 @@ import {
   Users,
 } from "lucide-react";
 import Navbar from "../../components/Navbar";
+import ExportPreviewModal, {
+  downloadCsvFile,
+  printReport,
+  defaultSelection,
+} from "../../components/Exportpreviewmodal";
 
 const PAGE_SIZE = 6;
 const BRAND = "#005A76";
@@ -46,9 +51,12 @@ function getDateRangeParams(option) {
   const now = new Date();
   const from = new Date(now);
   if (option === "Last 7 Days") from.setDate(from.getDate() - 7);
-  else if (option === "This Month") { from.setDate(1); }
-  else if (option === "This Year") { from.setMonth(0); from.setDate(1); }
-  else from.setDate(from.getDate() - 30); // Last 30 Days (default)
+  else if (option === "This Month") {
+    from.setDate(1);
+  } else if (option === "This Year") {
+    from.setMonth(0);
+    from.setDate(1);
+  } else from.setDate(from.getDate() - 30); // Last 30 Days (default)
   return { from: from.toISOString(), to: now.toISOString() };
 }
 
@@ -60,17 +68,40 @@ function getDateRangeParams(option) {
 const ACTION_META = {
   BORROW: { label: "Book Borrowed", className: "bg-sky-100 text-sky-700" },
   RETURN: { label: "Book Returned", className: "bg-amber-100 text-amber-700" },
-  REFRESH_OVERDUE: { label: "Overdue Refresh", className: "bg-red-100 text-red-600" },
-  CREATE: { label: "Record Created", className: "bg-emerald-100 text-emerald-700" },
-  UPDATE: { label: "Record Updated", className: "bg-violet-100 text-violet-700" },
-  UPDATE_STATUS: { label: "Status Changed", className: "bg-violet-100 text-violet-700" },
+  REFRESH_OVERDUE: {
+    label: "Overdue Refresh",
+    className: "bg-red-100 text-red-600",
+  },
+  CREATE: {
+    label: "Record Created",
+    className: "bg-emerald-100 text-emerald-700",
+  },
+  UPDATE: {
+    label: "Record Updated",
+    className: "bg-violet-100 text-violet-700",
+  },
+  UPDATE_STATUS: {
+    label: "Status Changed",
+    className: "bg-violet-100 text-violet-700",
+  },
   DELETE: { label: "Record Deleted", className: "bg-red-100 text-red-600" },
-  REPLY: { label: "Feedback Replied", className: "bg-indigo-100 text-indigo-700" },
-  REMOVE_REPLY: { label: "Reply Removed", className: "bg-slate-100 text-slate-500" },
+  REPLY: {
+    label: "Feedback Replied",
+    className: "bg-indigo-100 text-indigo-700",
+  },
+  REMOVE_REPLY: {
+    label: "Reply Removed",
+    className: "bg-slate-100 text-slate-500",
+  },
 };
 
 function getActionMeta(action) {
-  return ACTION_META[action] || { label: action || "Unknown", className: "bg-slate-100 text-slate-600" };
+  return (
+    ACTION_META[action] || {
+      label: action || "Unknown",
+      className: "bg-slate-100 text-slate-600",
+    }
+  );
 }
 
 // table_name from system_logs (e.g. 'borrow_records', 'staff', 'feedback')
@@ -87,17 +118,31 @@ function formatTableName(tableName) {
 function getInitials(name) {
   if (!name) return "??";
   const parts = name.trim().split(/\s+/);
-  return parts.slice(0, 2).map((p) => p[0]?.toUpperCase() || "").join("") || "??";
+  return (
+    parts
+      .slice(0, 2)
+      .map((p) => p[0]?.toUpperCase() || "")
+      .join("") || "??"
+  );
 }
 
 function formatDate(value) {
   return value
-    ? new Date(value).toLocaleDateString("en-US", { month: "short", day: "2-digit", year: "numeric" })
+    ? new Date(value).toLocaleDateString("en-US", {
+        month: "short",
+        day: "2-digit",
+        year: "numeric",
+      })
     : "--";
 }
 
 function formatTime(value) {
-  return value ? new Date(value).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }) : "--";
+  return value
+    ? new Date(value).toLocaleTimeString("en-US", {
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : "--";
 }
 
 // Maps a system_logs row (via reportsController.staffActivity's `logs`
@@ -106,7 +151,9 @@ function formatTime(value) {
 // shown as "<Table Name> #<record_id>" instead of inventing a book title
 // the way the old mock data did.
 function normalizeLog(log) {
-  const staffName = log.users ? `${log.users.first_name} ${log.users.last_name}`.trim() : "System";
+  const staffName = log.users
+    ? `${log.users.first_name} ${log.users.last_name}`.trim()
+    : "System";
   return {
     id: `LOG-${log.log_id}`,
     staffId: log.user_id,
@@ -123,43 +170,61 @@ function normalizeLog(log) {
   };
 }
 
-function escapeCsvValue(value) {
-  return `"${String(value).replace(/"/g, '""')}"`;
-}
+// Column list the export preview modal picks from - labels match the old
+// CSV headers 1:1, so the default (all-checked) export is unchanged.
+const EXPORT_COLUMNS = [
+  { key: "id", label: "Log ID" },
+  { key: "staffName", label: "Staff Name" },
+  {
+    key: "staffEmail",
+    label: "Staff Email",
+    csvValue: (row) => row.staffEmail || "--",
+  },
+  {
+    key: "action",
+    label: "Action",
+    csvValue: (row) => getActionMeta(row.action).label,
+    render: (row) => getActionMeta(row.action).label,
+  },
+  {
+    key: "tableName",
+    label: "Table",
+    csvValue: (row) => formatTableName(row.tableName),
+    render: (row) => formatTableName(row.tableName),
+  },
+  {
+    key: "recordId",
+    label: "Record ID",
+    csvValue: (row) => row.recordId ?? "--",
+  },
+  { key: "date", label: "Date" },
+  { key: "time", label: "Time" },
+];
 
-function downloadCsv(rows) {
-  const headers = ["Log ID", "Staff Name", "Staff Email", "Action", "Table", "Record ID", "Date", "Time"];
-  const csvRows = rows.map((row) => [
-    row.id,
-    row.staffName,
-    row.staffEmail || "--",
-    getActionMeta(row.action).label,
-    formatTableName(row.tableName),
-    row.recordId ?? "--",
-    row.date,
-    row.time,
-  ]);
-  const csv = [headers, ...csvRows].map((row) => row.map(escapeCsvValue).join(",")).join("\n");
-  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = "staff-activity-report.csv";
-  link.click();
-  URL.revokeObjectURL(url);
-}
-
-function SummaryCard({ title, value, note, icon: Icon, iconClass, noteClass = "text-emerald-600" }) {
+function SummaryCard({
+  title,
+  value,
+  note,
+  icon: Icon,
+  iconClass,
+  noteClass = "text-emerald-600",
+}) {
   return (
     <article className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
       <div className="flex items-start gap-4">
-        <span className={`mt-1 flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full ${iconClass}`}>
+        <span
+          className={`mt-1 flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full ${iconClass}`}
+        >
           <Icon size={20} />
         </span>
         <div className="min-w-0">
           <p className="text-xs font-bold text-slate-400">{title}</p>
-          <h3 className="mt-1 text-2xl font-black tracking-normal text-slate-800">{value}</h3>
-          {note && <p className={`mt-1 text-[11px] font-black ${noteClass}`}>{note}</p>}
+          <h3 className="mt-1 text-2xl font-black tracking-normal text-slate-800">
+            {value}
+          </h3>
+          {note && (
+            <p className={`mt-1 text-[11px] font-black ${noteClass}`}>{note}</p>
+          )}
         </div>
       </div>
     </article>
@@ -195,6 +260,38 @@ export default function StaffActivityReport() {
   const [currentPage, setCurrentPage] = useState(1);
   const [toast, setToast] = useState("");
 
+  // Export preview modal: null when closed, otherwise { type: 'csv' | 'pdf' }
+  const [exportModal, setExportModal] = useState(null);
+  const [exportSelection, setExportSelection] = useState(() =>
+    defaultSelection(EXPORT_COLUMNS),
+  );
+
+  const toggleExportColumn = (key) =>
+    setExportSelection((prev) => ({ ...prev, [key]: !prev[key] }));
+  const setAllExportColumns = (checked) =>
+    setExportSelection(
+      EXPORT_COLUMNS.reduce((acc, col) => ({ ...acc, [col.key]: checked }), {}),
+    );
+
+  const confirmExport = () => {
+    if (!exportModal) return;
+    if (exportModal.type === "csv") {
+      downloadCsvFile(
+        filteredLogs,
+        EXPORT_COLUMNS,
+        exportSelection,
+        "staff-activity-report.csv",
+      );
+      showMessage("Staff activity exported");
+    } else {
+      printReport(filteredLogs, EXPORT_COLUMNS, exportSelection, {
+        title: "Staff Activity Report",
+        brandColor: "#005A76",
+      });
+    }
+    setExportModal(null);
+  };
+
   const showMessage = (message) => {
     setToast(message);
     window.setTimeout(() => setToast(""), 2200);
@@ -209,7 +306,9 @@ export default function StaffActivityReport() {
       if (from) params.set("from", from);
       if (to) params.set("to", to);
 
-      const json = await apiFetch(`/reports/staff-activity?${params.toString()}`);
+      const json = await apiFetch(
+        `/reports/staff-activity?${params.toString()}`,
+      );
       setLogs((json.data?.logs || []).map(normalizeLog));
       setByUser(json.data?.byUser || []);
     } catch (err) {
@@ -224,7 +323,10 @@ export default function StaffActivityReport() {
   }, [loadReport]);
 
   const staffOptions = useMemo(
-    () => ["All Staff", ...new Set(logs.map((log) => log.staffName))].sort((a, b) => (a === "All Staff" ? -1 : a.localeCompare(b))),
+    () =>
+      ["All Staff", ...new Set(logs.map((log) => log.staffName))].sort(
+        (a, b) => (a === "All Staff" ? -1 : a.localeCompare(b)),
+      ),
     [logs],
   );
 
@@ -238,18 +340,27 @@ export default function StaffActivityReport() {
     const tableQuery = tableSearch.trim().toLowerCase();
 
     return logs.filter((log) => {
-      const text = `${log.id} ${log.staffName} ${getActionMeta(log.action).label} ${formatTableName(log.tableName)} ${log.recordId ?? ""} ${log.date} ${log.time}`.toLowerCase();
-      const matchesSearch = (!headerQuery || text.includes(headerQuery)) && (!tableQuery || text.includes(tableQuery));
-      const matchesStaff = staffFilter === "All Staff" || log.staffName === staffFilter;
-      const matchesAction = actionFilter === "All Activities" || log.action === actionFilter;
+      const text =
+        `${log.id} ${log.staffName} ${getActionMeta(log.action).label} ${formatTableName(log.tableName)} ${log.recordId ?? ""} ${log.date} ${log.time}`.toLowerCase();
+      const matchesSearch =
+        (!headerQuery || text.includes(headerQuery)) &&
+        (!tableQuery || text.includes(tableQuery));
+      const matchesStaff =
+        staffFilter === "All Staff" || log.staffName === staffFilter;
+      const matchesAction =
+        actionFilter === "All Activities" || log.action === actionFilter;
       return matchesSearch && matchesStaff && matchesAction;
     });
   }, [logs, headerSearch, tableSearch, staffFilter, actionFilter]);
 
   const pageCount = Math.max(1, Math.ceil(filteredLogs.length / PAGE_SIZE));
   const safePage = Math.min(currentPage, pageCount);
-  const visibleLogs = filteredLogs.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
-  const showingStart = filteredLogs.length === 0 ? 0 : (safePage - 1) * PAGE_SIZE + 1;
+  const visibleLogs = filteredLogs.slice(
+    (safePage - 1) * PAGE_SIZE,
+    safePage * PAGE_SIZE,
+  );
+  const showingStart =
+    filteredLogs.length === 0 ? 0 : (safePage - 1) * PAGE_SIZE + 1;
   const showingEnd = Math.min(safePage * PAGE_SIZE, filteredLogs.length);
 
   // Real summary counts computed from actual log actions, replacing the
@@ -258,7 +369,9 @@ export default function StaffActivityReport() {
     const total = logs.length;
     const borrowed = logs.filter((l) => l.action === "BORROW").length;
     const returned = logs.filter((l) => l.action === "RETURN").length;
-    const overdueRefreshes = logs.filter((l) => l.action === "REFRESH_OVERDUE").length;
+    const overdueRefreshes = logs.filter(
+      (l) => l.action === "REFRESH_OVERDUE",
+    ).length;
     return { total, borrowed, returned, overdueRefreshes };
   }, [logs]);
 
@@ -269,7 +382,11 @@ export default function StaffActivityReport() {
     logs.forEach((log) => {
       if (log.action !== "BORROW" && log.action !== "RETURN") return;
       const dayKey = new Date(log.rawDate).toISOString().slice(0, 10);
-      const entry = byDay.get(dayKey) || { day: dayKey, borrowing: 0, returning: 0 };
+      const entry = byDay.get(dayKey) || {
+        day: dayKey,
+        borrowing: 0,
+        returning: 0,
+      };
       if (log.action === "BORROW") entry.borrowing += 1;
       else entry.returning += 1;
       byDay.set(dayKey, entry);
@@ -279,13 +396,21 @@ export default function StaffActivityReport() {
       .slice(-7)
       .map((entry) => ({
         ...entry,
-        label: new Date(entry.day).toLocaleDateString("en-US", { weekday: "short" }),
+        label: new Date(entry.day).toLocaleDateString("en-US", {
+          weekday: "short",
+        }),
       }));
   }, [logs]);
 
-  const trendMax = Math.max(...trend.flatMap((t) => [t.borrowing, t.returning]), 1);
+  const trendMax = Math.max(
+    ...trend.flatMap((t) => [t.borrowing, t.returning]),
+    1,
+  );
 
-  const topStaff = useMemo(() => [...byUser].sort((a, b) => b.actionCount - a.actionCount).slice(0, 5), [byUser]);
+  const topStaff = useMemo(
+    () => [...byUser].sort((a, b) => b.actionCount - a.actionCount).slice(0, 5),
+    [byUser],
+  );
 
   const clearFilters = () => {
     setHeaderSearch("");
@@ -304,7 +429,10 @@ export default function StaffActivityReport() {
         breadcrumb="View and analyze staff activities in the library"
         onBack={() => window.history.back()}
         searchValue={headerSearch}
-        onSearchChange={(value) => { setHeaderSearch(value); setCurrentPage(1); }}
+        onSearchChange={(value) => {
+          setHeaderSearch(value);
+          setCurrentPage(1);
+        }}
         searchPlaceholder="Search staff, action..."
       />
 
@@ -318,7 +446,11 @@ export default function StaffActivityReport() {
         {error && (
           <div className="mb-4 flex items-center justify-between rounded-md border border-red-200 bg-red-50 px-4 py-3 text-xs font-bold text-red-600">
             <span>{error}</span>
-            <button type="button" onClick={loadReport} className="rounded-md bg-red-600 px-3 py-1.5 text-white">
+            <button
+              type="button"
+              onClick={loadReport}
+              className="rounded-md bg-red-600 px-3 py-1.5 text-white"
+            >
               Retry
             </button>
           </div>
@@ -331,26 +463,27 @@ export default function StaffActivityReport() {
             disabled={loading}
             className="inline-flex h-9 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-[11px] font-black text-slate-600 shadow-sm transition hover:bg-slate-50 disabled:opacity-50"
           >
-            {loading ? <Loader2 size={14} className="animate-spin" /> : <RefreshCcw size={14} />}
+            {loading ? (
+              <Loader2 size={14} className="animate-spin" />
+            ) : (
+              <RefreshCcw size={14} />
+            )}
             {loading ? "Loading..." : "Refresh"}
           </button>
 
           <div className="flex flex-wrap justify-end gap-2">
             <button
               type="button"
-              onClick={() => window.print()}
-              className="inline-flex h-9 items-center gap-2 rounded-md border border-slate-200 bg-white px-4 text-xs font-black text-slate-600 shadow-sm transition hover:border-[#005A76] hover:text-[#005A76]"
+              disabled={filteredLogs.length === 0}
+              onClick={() => setExportModal({ type: "pdf" })}
+              className="inline-flex h-9 items-center gap-2 rounded-md border border-slate-200 bg-white px-4 text-xs font-black text-slate-600 shadow-sm transition hover:border-[#005A76] hover:text-[#005A76] disabled:cursor-not-allowed disabled:opacity-50"
             >
               <FileDown size={14} />
               PDF
             </button>
             <button
               type="button"
-              onClick={() =>
-                filteredLogs.length
-                  ? (downloadCsv(filteredLogs), showMessage("Staff activity exported"))
-                  : showMessage("No activities to export")
-              }
+              onClick={() => setExportModal({ type: "csv" })}
               disabled={filteredLogs.length === 0}
               className="inline-flex h-9 items-center gap-2 rounded-md border border-slate-200 bg-white px-4 text-xs font-black text-slate-600 shadow-sm transition hover:border-[#005A76] hover:text-[#005A76] disabled:cursor-not-allowed disabled:opacity-50"
             >
@@ -359,8 +492,9 @@ export default function StaffActivityReport() {
             </button>
             <button
               type="button"
-              onClick={() => window.print()}
-              className="inline-flex h-9 items-center gap-2 rounded-md bg-[#005A76] px-4 text-xs font-black text-white shadow-sm transition hover:bg-[#00445a]"
+              disabled={filteredLogs.length === 0}
+              onClick={() => setExportModal({ type: "pdf" })}
+              className="inline-flex h-9 items-center gap-2 rounded-md bg-[#005A76] px-4 text-xs font-black text-white shadow-sm transition hover:bg-[#00445a] disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Printer size={14} />
               Print Report
@@ -403,7 +537,9 @@ export default function StaffActivityReport() {
         <section className="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_300px]">
           <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <h2 className="text-sm font-black text-slate-700">Borrow / Return Activity (last 7 active days)</h2>
+              <h2 className="text-sm font-black text-slate-700">
+                Borrow / Return Activity (last 7 active days)
+              </h2>
               <div className="flex items-center gap-4 text-[11px] font-bold text-slate-500">
                 <span className="inline-flex items-center gap-1.5">
                   <span className="h-2.5 w-2.5 rounded-full bg-[#005A76]" />
@@ -421,18 +557,27 @@ export default function StaffActivityReport() {
                 <>
                   <div
                     className="grid h-56 items-end gap-4 border-b border-slate-200"
-                    style={{ gridTemplateColumns: `repeat(${trend.length}, minmax(0, 1fr))` }}
+                    style={{
+                      gridTemplateColumns: `repeat(${trend.length}, minmax(0, 1fr))`,
+                    }}
                   >
                     {trend.map((item) => (
-                      <div key={item.day} className="flex h-full min-w-0 items-end justify-center gap-1.5">
+                      <div
+                        key={item.day}
+                        className="flex h-full min-w-0 items-end justify-center gap-1.5"
+                      >
                         <div
                           className="w-full max-w-[38px] rounded-t-sm bg-[#B7CBD6] transition hover:bg-[#9AB6C4]"
-                          style={{ height: `${Math.max(4, (item.borrowing / trendMax) * 100)}%` }}
+                          style={{
+                            height: `${Math.max(4, (item.borrowing / trendMax) * 100)}%`,
+                          }}
                           title={`${item.label} borrowing ${item.borrowing}`}
                         />
                         <div
                           className="w-full max-w-[38px] rounded-t-sm bg-[#4F8196] transition hover:bg-[#005A76]"
-                          style={{ height: `${Math.max(4, (item.returning / trendMax) * 100)}%` }}
+                          style={{
+                            height: `${Math.max(4, (item.returning / trendMax) * 100)}%`,
+                          }}
                           title={`${item.label} returning ${item.returning}`}
                         />
                       </div>
@@ -440,14 +585,20 @@ export default function StaffActivityReport() {
                   </div>
                   <div
                     className="mt-3 grid gap-4 text-center text-[11px] font-black text-slate-400"
-                    style={{ gridTemplateColumns: `repeat(${trend.length}, minmax(0, 1fr))` }}
+                    style={{
+                      gridTemplateColumns: `repeat(${trend.length}, minmax(0, 1fr))`,
+                    }}
                   >
-                    {trend.map((item) => <span key={item.day}>{item.label}</span>)}
+                    {trend.map((item) => (
+                      <span key={item.day}>{item.label}</span>
+                    ))}
                   </div>
                 </>
               ) : (
                 <p className="py-14 text-center text-xs font-semibold text-slate-400">
-                  {loading ? "Loading trend..." : "No borrow/return activity in this window"}
+                  {loading
+                    ? "Loading trend..."
+                    : "No borrow/return activity in this window"}
                 </p>
               )}
             </div>
@@ -456,18 +607,27 @@ export default function StaffActivityReport() {
           <aside className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
             <div className="flex items-center gap-2">
               <Users size={16} className="text-[#005A76]" />
-              <h2 className="text-sm font-black text-slate-700">Top Staff by Activity</h2>
+              <h2 className="text-sm font-black text-slate-700">
+                Top Staff by Activity
+              </h2>
             </div>
             <div className="mt-5 space-y-4">
               {topStaff.map((staff, index) => (
-                <div key={staff.userId ?? index} className="flex items-center justify-between gap-3">
+                <div
+                  key={staff.userId ?? index}
+                  className="flex items-center justify-between gap-3"
+                >
                   <div className="flex items-center gap-3 min-w-0">
                     <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-[#E6F4F7] text-[11px] font-black text-[#005A76]">
                       {getInitials(staff.name)}
                     </span>
-                    <span className="truncate text-xs font-bold text-slate-700">{staff.name}</span>
+                    <span className="truncate text-xs font-bold text-slate-700">
+                      {staff.name}
+                    </span>
                   </div>
-                  <span className="flex-shrink-0 text-xs font-black text-[#005A76]">{staff.actionCount}</span>
+                  <span className="flex-shrink-0 text-xs font-black text-[#005A76]">
+                    {staff.actionCount}
+                  </span>
                 </div>
               ))}
               {!topStaff.length && (
@@ -484,7 +644,9 @@ export default function StaffActivityReport() {
                   Most Active Staff
                 </div>
                 <p className="mt-3 text-sm font-black">{topStaff[0].name}</p>
-                <p className="mt-1 text-xs font-semibold text-white/80">{topStaff[0].actionCount} actions in this window</p>
+                <p className="mt-1 text-xs font-semibold text-white/80">
+                  {topStaff[0].actionCount} actions in this window
+                </p>
               </div>
             )}
           </aside>
@@ -492,18 +654,49 @@ export default function StaffActivityReport() {
 
         <section className="mt-5 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
           <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-            <SelectFilter label="Date Range" value={dateRange} onChange={(value) => { setDateRange(value); setCurrentPage(1); }}>
-              {["Last 7 Days", "Last 30 Days", "This Month", "This Year", "All Time"].map((option) => (
+            <SelectFilter
+              label="Date Range"
+              value={dateRange}
+              onChange={(value) => {
+                setDateRange(value);
+                setCurrentPage(1);
+              }}
+            >
+              {[
+                "Last 7 Days",
+                "Last 30 Days",
+                "This Month",
+                "This Year",
+                "All Time",
+              ].map((option) => (
                 <option key={option}>{option}</option>
               ))}
             </SelectFilter>
-            <SelectFilter label="Staff Name" value={staffFilter} onChange={(value) => { setStaffFilter(value); setCurrentPage(1); }}>
-              {staffOptions.map((option) => <option key={option}>{option}</option>)}
+            <SelectFilter
+              label="Staff Name"
+              value={staffFilter}
+              onChange={(value) => {
+                setStaffFilter(value);
+                setCurrentPage(1);
+              }}
+            >
+              {staffOptions.map((option) => (
+                <option key={option}>{option}</option>
+              ))}
             </SelectFilter>
-            <SelectFilter label="Activity Type" value={actionFilter} onChange={(value) => { setActionFilter(value); setCurrentPage(1); }}>
+            <SelectFilter
+              label="Activity Type"
+              value={actionFilter}
+              onChange={(value) => {
+                setActionFilter(value);
+                setCurrentPage(1);
+              }}
+            >
               {actionOptions.map((option) => (
                 <option key={option} value={option}>
-                  {option === "All Activities" ? option : getActionMeta(option).label}
+                  {option === "All Activities"
+                    ? option
+                    : getActionMeta(option).label}
                 </option>
               ))}
             </SelectFilter>
@@ -521,13 +714,21 @@ export default function StaffActivityReport() {
 
         <section className="mt-5 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
           <div className="flex flex-col gap-3 border-b border-slate-100 px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
-            <h2 className="text-sm font-black text-slate-700">Detailed Activity Log</h2>
+            <h2 className="text-sm font-black text-slate-700">
+              Detailed Activity Log
+            </h2>
             <label className="relative">
-              <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <Search
+                size={15}
+                className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+              />
               <input
                 type="search"
                 value={tableSearch}
-                onChange={(event) => { setTableSearch(event.target.value); setCurrentPage(1); }}
+                onChange={(event) => {
+                  setTableSearch(event.target.value);
+                  setCurrentPage(1);
+                }}
                 placeholder="Search activity log..."
                 className="h-10 w-full min-w-64 rounded-md border border-slate-200 bg-slate-50 pl-9 pr-3 text-xs font-bold text-slate-600 outline-none transition focus:border-[#005A76] focus:bg-white"
               />
@@ -538,8 +739,16 @@ export default function StaffActivityReport() {
             <table className="w-full min-w-[900px] text-left">
               <thead className="bg-slate-50 text-[11px] uppercase tracking-wide text-slate-500">
                 <tr>
-                  {["Log ID", "Staff Name", "Activity", "Table / Record", "Date & Time"].map((heading) => (
-                    <th key={heading} className="px-6 py-4 font-black">{heading}</th>
+                  {[
+                    "Log ID",
+                    "Staff Name",
+                    "Activity",
+                    "Table / Record",
+                    "Date & Time",
+                  ].map((heading) => (
+                    <th key={heading} className="px-6 py-4 font-black">
+                      {heading}
+                    </th>
                   ))}
                 </tr>
               </thead>
@@ -547,8 +756,13 @@ export default function StaffActivityReport() {
                 {loading && !logs.length && (
                   <tr>
                     <td colSpan="5" className="px-6 py-16 text-center">
-                      <Loader2 size={20} className="mx-auto animate-spin text-[#005A76]" />
-                      <p className="mt-2 text-xs font-bold text-slate-400">Loading staff activity...</p>
+                      <Loader2
+                        size={20}
+                        className="mx-auto animate-spin text-[#005A76]"
+                      />
+                      <p className="mt-2 text-xs font-bold text-slate-400">
+                        Loading staff activity...
+                      </p>
                     </td>
                   </tr>
                 )}
@@ -558,27 +772,41 @@ export default function StaffActivityReport() {
                     const meta = getActionMeta(log.action);
                     return (
                       <tr key={log.id} className="transition hover:bg-slate-50">
-                        <td className="px-6 py-4 text-xs font-black text-[#005A76]">{log.id}</td>
+                        <td className="px-6 py-4 text-xs font-black text-[#005A76]">
+                          {log.id}
+                        </td>
                         <td className="px-6 py-4">
                           <div className="flex items-center gap-3">
                             <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-[#E6F4F7] text-[11px] font-black text-[#005A76]">
                               {log.initials}
                             </span>
                             <div className="min-w-0">
-                              <p className="truncate font-bold text-slate-700">{log.staffName}</p>
-                              {log.staffEmail && <p className="truncate text-[11px] font-semibold text-slate-400">{log.staffEmail}</p>}
+                              <p className="truncate font-bold text-slate-700">
+                                {log.staffName}
+                              </p>
+                              {log.staffEmail && (
+                                <p className="truncate text-[11px] font-semibold text-slate-400">
+                                  {log.staffEmail}
+                                </p>
+                              )}
                             </div>
                           </div>
                         </td>
                         <td className="px-6 py-4">
-                          <span className={`inline-flex rounded-full px-3 py-1 text-[10px] font-black ${meta.className}`}>
+                          <span
+                            className={`inline-flex rounded-full px-3 py-1 text-[10px] font-black ${meta.className}`}
+                          >
                             {meta.label}
                           </span>
                         </td>
                         <td className="px-6 py-4">
-                          <p className="font-semibold text-slate-700">{formatTableName(log.tableName)}</p>
+                          <p className="font-semibold text-slate-700">
+                            {formatTableName(log.tableName)}
+                          </p>
                           <p className="mt-1 text-[11px] font-semibold text-slate-400">
-                            {log.recordId != null ? `Record #${log.recordId}` : "--"}
+                            {log.recordId != null
+                              ? `Record #${log.recordId}`
+                              : "--"}
                           </p>
                         </td>
                         <td className="px-6 py-4">
@@ -597,7 +825,10 @@ export default function StaffActivityReport() {
 
                 {!loading && visibleLogs.length === 0 && (
                   <tr>
-                    <td colSpan="5" className="px-6 py-12 text-center text-sm font-semibold text-slate-400">
+                    <td
+                      colSpan="5"
+                      className="px-6 py-12 text-center text-sm font-semibold text-slate-400"
+                    >
                       No staff activity records found.
                     </td>
                   </tr>
@@ -608,7 +839,8 @@ export default function StaffActivityReport() {
 
           <div className="flex flex-col gap-3 border-t border-slate-100 bg-white px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-xs font-semibold text-slate-500">
-              Showing {showingStart}-{showingEnd} of {filteredLogs.length} entries
+              Showing {showingStart}-{showingEnd} of {filteredLogs.length}{" "}
+              entries
             </p>
             <div className="flex items-center gap-2">
               <button
@@ -620,21 +852,27 @@ export default function StaffActivityReport() {
               >
                 <ChevronLeft size={16} />
               </button>
-              {Array.from({ length: pageCount }, (_, index) => index + 1).map((page) => (
-                <button
-                  type="button"
-                  key={page}
-                  onClick={() => setCurrentPage(page)}
-                  className={`flex h-8 w-8 items-center justify-center rounded-md text-xs font-black transition ${
-                    safePage === page ? "bg-[#005A76] text-white" : "text-slate-600 hover:bg-slate-100"
-                  }`}
-                >
-                  {page}
-                </button>
-              ))}
+              {Array.from({ length: pageCount }, (_, index) => index + 1).map(
+                (page) => (
+                  <button
+                    type="button"
+                    key={page}
+                    onClick={() => setCurrentPage(page)}
+                    className={`flex h-8 w-8 items-center justify-center rounded-md text-xs font-black transition ${
+                      safePage === page
+                        ? "bg-[#005A76] text-white"
+                        : "text-slate-600 hover:bg-slate-100"
+                    }`}
+                  >
+                    {page}
+                  </button>
+                ),
+              )}
               <button
                 type="button"
-                onClick={() => setCurrentPage((page) => Math.min(pageCount, page + 1))}
+                onClick={() =>
+                  setCurrentPage((page) => Math.min(pageCount, page + 1))
+                }
                 disabled={safePage === pageCount}
                 className="flex h-8 w-8 items-center justify-center rounded-md text-slate-500 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
                 aria-label="Next page"
@@ -645,6 +883,21 @@ export default function StaffActivityReport() {
           </div>
         </section>
       </main>
+
+      {exportModal && (
+        <ExportPreviewModal
+          type={exportModal.type}
+          rows={filteredLogs}
+          columns={EXPORT_COLUMNS}
+          selection={exportSelection}
+          onToggleColumn={toggleExportColumn}
+          onSelectAll={setAllExportColumns}
+          onClose={() => setExportModal(null)}
+          onConfirm={confirmExport}
+          getRowKey={(row) => row.id}
+          brandColor="#005A76"
+        />
+      )}
     </div>
   );
 }

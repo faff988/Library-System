@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   BookOpen,
   CheckCircle2,
@@ -14,10 +14,11 @@ import {
   FileBarChart2,
   ChevronDown,
   ArrowRight,
-  BookPlus,
   CornerDownRight,
   UserRound,
   HandCoins,
+  MessageSquare,
+  CalendarDays,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -34,23 +35,30 @@ import {
 } from "recharts";
 import Navbar from "../components/Navbar";
 import api from "../utils/api";
+import { useAuth } from "../hooks/useAuth";
 
 const CATEGORY_COLORS = ["#3B82F6", "#8B5CF6", "#94A3B8", "#F59E0B", "#22C55E", "#EC4899", "#14B8A6"];
 
+// Background refresh interval for the whole dashboard.
+const REFRESH_MS = 60_000;
+
 const RANGE_OPTIONS = ["This Week", "This Month", "This Quarter"];
-// Maps each range option to the /reports/transactions call that backs it.
-// Weekly bucketing is used for the quarter view since 90 daily points
+// Maps each range option to the `range` param of GET /dashboard/trend.
+// The quarter view is bucketed weekly server-side since 90 daily points
 // would be unreadable in this chart's width.
-const RANGE_CONFIG = {
-  "This Week": { period: "daily", days: 7 },
-  "This Month": { period: "daily", days: 30 },
-  "This Quarter": { period: "weekly", days: 90 },
+const RANGE_PARAM = {
+  "This Week": "week",
+  "This Month": "month",
+  "This Quarter": "quarter",
 };
 
+// `module` + `action` gate each shortcut with the same can() check the rest
+// of the app uses, so a user never sees a button that leads to a 403.
+// Shortcuts without a module are always visible.
 const QUICK_ACTIONS = [
-  { label: "Add Book", icon: Plus, bg: "#EDE9FE", color: "#7C3AED", path: "/inventory" },
-  { label: "New Borrow", icon: RefreshCcw, bg: "#DCFCE7", color: "#16A34A", path: "/borrow-return" },
-  { label: "Add Member", icon: UserPlus, bg: "#DBEAFE", color: "#2563EB", path: "/member" },
+  { label: "Add Book", icon: Plus, bg: "#EDE9FE", color: "#7C3AED", path: "/inventory/add", module: "inventory", action: "create" },
+  { label: "New Borrow", icon: RefreshCcw, bg: "#DCFCE7", color: "#16A34A", path: "/borrow-return", module: "borrow_return", action: "create" },
+  { label: "Add Member", icon: UserPlus, bg: "#DBEAFE", color: "#2563EB", path: "/member", module: "members", action: "create" },
   { label: "Create Event", icon: CalendarPlus, bg: "#FFEDD5", color: "#EA580C", path: "/event" },
   { label: "Generate Report", icon: FileBarChart2, bg: "#FEE2E2", color: "#DC2626", path: "/reports/book-inventory" },
 ];
@@ -59,13 +67,13 @@ function formatNumber(value) {
   return new Intl.NumberFormat("en-US").format(value ?? 0);
 }
 
-function formatTime(value) {
+// Today -> "02:15 PM"; any other day -> "Oct 14, 02:15 PM".
+function formatWhen(value) {
   if (!value) return "";
-  return new Date(value).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
-}
-
-function isoDate(date) {
-  return date.toISOString().slice(0, 10);
+  const date = new Date(value);
+  const time = date.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
+  if (date.toDateString() === new Date().toDateString()) return time;
+  return `${date.toLocaleDateString("en-US", { month: "short", day: "numeric" })}, ${time}`;
 }
 
 function ChartTooltip({ active, payload, label }) {
@@ -84,101 +92,98 @@ function ChartTooltip({ active, payload, label }) {
 
 export default function Dashboard() {
   const navigate = useNavigate();
+  const { can, role } = useAuth();
+
   const [range, setRange] = useState("This Month");
   const [rangeOpen, setRangeOpen] = useState(false);
 
   const [overview, setOverview] = useState(null);
-  const [lostCount, setLostCount] = useState(0);
   const [overviewLoading, setOverviewLoading] = useState(true);
+  const [overviewError, setOverviewError] = useState("");
+  const [lastUpdated, setLastUpdated] = useState(null);
 
   const [trend, setTrend] = useState([]);
   const [trendLoading, setTrendLoading] = useState(true);
+  const [trendError, setTrendError] = useState("");
 
-  const [categories, setCategories] = useState([]);
-  const [categoriesLoading, setCategoriesLoading] = useState(true);
-
-  useEffect(() => {
-    fetchOverview();
-    fetchCategories();
-  }, []);
-
-  useEffect(() => {
-    fetchTrend();
-  }, [range]);
-
-  const fetchOverview = async () => {
+  // `silent` refreshes (the 60s timer, tab re-focus) update the data in place
+  // without flashing the loading state.
+  const fetchOverview = useCallback(async (silent = false) => {
     try {
-      setOverviewLoading(true);
-      const [overviewRes, lostDamagedRes] = await Promise.all([
-        api.get("/dashboard/overview"),
-        api.get("/reports/lost-damaged"),
-      ]);
-      if (overviewRes.data?.success) setOverview(overviewRes.data.data);
-      if (lostDamagedRes.data?.success) setLostCount(lostDamagedRes.data.data.summary.lost);
-    } catch (err) {
-      console.error("Failed to load dashboard overview:", err);
-    } finally {
-      setOverviewLoading(false);
-    }
-  };
-
-  const fetchTrend = async () => {
-    try {
-      setTrendLoading(true);
-      const { period, days } = RANGE_CONFIG[range];
-      const to = new Date();
-      const from = new Date();
-      from.setDate(from.getDate() - days);
-
-      const params = new URLSearchParams({ period, from: isoDate(from), to: isoDate(to) });
-      const response = await api.get(`/reports/transactions?${params.toString()}`);
-      if (response.data?.success) setTrend(response.data.data.rows);
-    } catch (err) {
-      console.error("Failed to load borrow/return trend:", err);
-    } finally {
-      setTrendLoading(false);
-    }
-  };
-
-  // No endpoint aggregates borrows by category directly, so this sums
-  // timesBorrowed per book.category across the top 100 most-borrowed
-  // titles - an approximation of category popularity, not an exact
-  // count over every borrow record ever made.
-  const fetchCategories = async () => {
-    try {
-      setCategoriesLoading(true);
-      const response = await api.get("/reports/popular-books?limit=100");
+      if (!silent) setOverviewLoading(true);
+      setOverviewError("");
+      const response = await api.get("/dashboard/overview");
       if (response.data?.success) {
-        const totals = new Map();
-        response.data.data.forEach(({ book, timesBorrowed }) => {
-          const key = book?.category || "Uncategorized";
-          totals.set(key, (totals.get(key) || 0) + timesBorrowed);
-        });
-
-        const sorted = Array.from(totals.entries()).sort((a, b) => b[1] - a[1]);
-        const top = sorted.slice(0, 4);
-        const otherTotal = sorted.slice(4).reduce((s, [, v]) => s + v, 0);
-        const combined = otherTotal > 0 ? [...top, ["Others", otherTotal]] : top;
-        const grandTotal = combined.reduce((s, [, v]) => s + v, 0);
-
-        setCategories(
-          combined.map(([name, value], index) => ({
-            name,
-            value,
-            pct: grandTotal ? `${Math.round((value / grandTotal) * 100)}%` : "0%",
-            color: CATEGORY_COLORS[index % CATEGORY_COLORS.length],
-          }))
-        );
+        setOverview(response.data.data);
+        setLastUpdated(new Date());
       }
     } catch (err) {
-      console.error("Failed to load category distribution:", err);
+      console.error("Failed to load dashboard overview:", err);
+      const backendMessage = err.response?.data?.error || err.response?.data?.message;
+      setOverviewError(backendMessage || "Failed to load dashboard data.");
     } finally {
-      setCategoriesLoading(false);
+      if (!silent) setOverviewLoading(false);
     }
+  }, []);
+
+  const fetchTrend = useCallback(async (silent = false) => {
+    try {
+      if (!silent) setTrendLoading(true);
+      const response = await api.get(`/dashboard/trend?range=${RANGE_PARAM[range]}`);
+      if (response.data?.success) {
+        setTrend(response.data.data.rows);
+        setTrendError("");
+      }
+    } catch (err) {
+      // A failure here shouldn't take the rest of the dashboard down with it.
+      console.error("Failed to load borrow/return trend:", err);
+      const status = err.response?.status;
+      const backendMessage = err.response?.data?.error || err.response?.data?.message;
+      setTrendError(`Couldn't load the trend${status ? ` (${status})` : ""}${backendMessage ? `: ${backendMessage}` : "."}`);
+      if (!silent) setTrend([]);
+    } finally {
+      if (!silent) setTrendLoading(false);
+    }
+  }, [range]);
+
+  useEffect(() => { fetchOverview(); }, [fetchOverview]);
+  useEffect(() => { fetchTrend(); }, [fetchTrend]);
+
+  // Keep the page live: refresh every minute while the tab is visible, and
+  // again as soon as the user comes back to the tab.
+  useEffect(() => {
+    const refresh = () => {
+      if (document.visibilityState === "visible") {
+        fetchOverview(true);
+        fetchTrend(true);
+      }
+    };
+    const timer = setInterval(refresh, REFRESH_MS);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, [fetchOverview, fetchTrend]);
+
+  const handleManualRefresh = () => {
+    fetchOverview(true);
+    fetchTrend(true);
   };
 
-  const totalCategoryBooks = categories.reduce((sum, c) => sum + c.value, 0);
+  const categories = useMemo(() => {
+    const rows = overview?.categoryBorrows || [];
+    const total = rows.reduce((sum, r) => sum + r.value, 0);
+    return rows.map((r, index) => ({
+      ...r,
+      pct: total ? `${Math.round((r.value / total) * 100)}%` : "0%",
+      color: CATEGORY_COLORS[index % CATEGORY_COLORS.length],
+    }));
+  }, [overview]);
 
+  const totalCategoryBorrows = categories.reduce((sum, c) => sum + c.value, 0);
+
+  const lostCount = overview?.lostCopies ?? 0;
   const borrowedCopies = overview ? (overview.totalCopies || 0) - (overview.availableCopies || 0) : 0;
   const availablePct = overview?.totalCopies ? Math.round((overview.availableCopies / overview.totalCopies) * 100) : 0;
   const borrowedPct = overview?.totalCopies ? Math.round((borrowedCopies / overview.totalCopies) * 100) : 0;
@@ -192,7 +197,14 @@ export default function Dashboard() {
         { label: "Borrowed Copies", value: formatNumber(borrowedCopies), sub: `${borrowedPct}% of total`, subColor: "#71717A", icon: UserCheck, iconBg: "#FFEDD5", iconColor: "#EA580C" },
         { label: "Missing / Lost", value: formatNumber(lostCount), sub: `${lostPct}% of total`, subColor: "#71717A", icon: AlertTriangle, iconBg: "#FEE2E2", iconColor: "#DC2626" },
         { label: "Active Members", value: formatNumber(overview.activeMembers), sub: `of ${formatNumber(overview.totalMembers)} total`, subColor: "#71717A", icon: Users, iconBg: "#CCFBF1", iconColor: "#0D9488" },
-        { label: "Overdue Items", value: formatNumber(overview.overdueBorrows), sub: "View overdue", subColor: "#055E83", icon: Clock, iconBg: "#FEF3C7", iconColor: "#D97706", link: true },
+        { label: "Overdue Items", value: formatNumber(overview.overdueBorrows), sub: "View overdue", subColor: "#055E83", icon: Clock, iconBg: "#FEF3C7", iconColor: "#D97706", link: "/borrow-return" },
+      ]
+    : [];
+
+  const attention = overview
+    ? [
+        { label: "Pending Feedback", value: overview.pendingFeedback, sub: "Awaiting a reply", icon: MessageSquare, iconBg: "#FCE7F3", iconColor: "#DB2777", path: "/feedback" },
+        { label: "Upcoming Events", value: overview.upcomingEvents, sub: "Scheduled from today", icon: CalendarDays, iconBg: "#FFEDD5", iconColor: "#EA580C", path: "/event" },
       ]
     : [];
 
@@ -227,11 +239,34 @@ export default function Dashboard() {
         .slice(0, 5)
     : [];
 
+  const visibleActions = QUICK_ACTIONS.filter((a) => !a.module || can(a.module, a.action));
+
   return (
     <div className="flex-1 bg-[#E9EEF4]">
-        <Navbar title="Dashboard" breadcrumb="Welcome back, Admin!" />
+        <Navbar title="Dashboard" breadcrumb={`Welcome back, ${role || "User"}!`} />
 
         <div className="px-6 py-5 space-y-5">
+
+          <div className="flex items-center justify-end gap-3 -mb-2">
+            {lastUpdated && (
+              <span className="text-[11px] font-semibold text-gray-400">
+                Updated {lastUpdated.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}
+              </span>
+            )}
+            <button
+              onClick={handleManualRefresh}
+              className="flex items-center gap-1.5 text-xs font-semibold text-gray-600 bg-white border border-gray-300 rounded-lg px-3 py-1.5 hover:bg-gray-50 transition"
+            >
+              <RefreshCcw size={12} /> Refresh
+            </button>
+          </div>
+
+          {overviewError && (
+            <div className="flex items-center justify-between bg-red-50 border border-red-200 rounded-xl px-4 py-3">
+              <p className="text-xs font-bold text-red-600">{overviewError}</p>
+              <button onClick={() => fetchOverview()} className="text-xs font-bold text-red-600 hover:underline">Retry</button>
+            </div>
+          )}
 
           <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-7 gap-4">
             {overviewLoading ? (
@@ -251,7 +286,7 @@ export default function Dashboard() {
                     <p className="text-[11px] font-semibold text-gray-700 mb-1">{label}</p>
                     <p className="text-xl font-black leading-tight text-gray-900">{value}</p>
                     {sub && (link ? (
-                      <button onClick={() => navigate("/borrow-return")} className="text-[11px] font-bold mt-1 hover:underline" style={{ color: subColor }}>
+                      <button onClick={() => navigate(link)} className="text-[11px] font-bold mt-1 hover:underline" style={{ color: subColor }}>
                         {sub}
                       </button>
                     ) : (
@@ -262,6 +297,27 @@ export default function Dashboard() {
               ))
             )}
           </div>
+
+          {!overviewLoading && attention.length > 0 && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {attention.map(({ label, value, sub, icon: Icon, iconBg, iconColor, path }) => (
+                <button
+                  key={label}
+                  onClick={() => navigate(path)}
+                  className="bg-white rounded-xl px-4 py-3 border border-gray-300 shadow-md flex items-center gap-3 text-left hover:bg-gray-50/80 transition"
+                >
+                  <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: iconBg, color: iconColor }}>
+                    <Icon size={17} />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-semibold text-gray-700">{label}</p>
+                    <p className="text-[11px] font-semibold text-gray-400">{sub}</p>
+                  </div>
+                  <span className="ml-auto text-xl font-black text-gray-900">{formatNumber(value)}</span>
+                </button>
+              ))}
+            </div>
+          )}
 
           <div className="grid grid-cols-1 lg:grid-cols-[1.6fr_1.1fr_1fr] gap-4 items-stretch">
 
@@ -294,6 +350,11 @@ export default function Dashboard() {
               <div className="h-52">
                 {trendLoading ? (
                   <div className="flex h-full items-center justify-center text-xs font-semibold text-gray-400">Loading trend...</div>
+                ) : trendError ? (
+                  <div className="flex h-full flex-col items-center justify-center gap-2 text-center">
+                    <p className="text-xs font-semibold text-red-500">{trendError}</p>
+                    <button onClick={() => fetchTrend()} className="text-xs font-bold text-[#055E83] hover:underline">Retry</button>
+                  </div>
                 ) : trend.length === 0 ? (
                   <div className="flex h-full items-center justify-center text-xs font-semibold text-gray-400">No activity in this range.</div>
                 ) : (
@@ -307,7 +368,7 @@ export default function Dashboard() {
                         axisLine={{ stroke: "#E2E8F0" }}
                         interval={Math.max(0, Math.floor(trend.length / 8) - 1)}
                       />
-                      <YAxis tick={{ fontSize: 10, fill: "#94A3B8" }} tickLine={false} axisLine={false} />
+                      <YAxis tick={{ fontSize: 10, fill: "#94A3B8" }} tickLine={false} axisLine={false} allowDecimals={false} />
                       <Tooltip content={<ChartTooltip />} />
                       <Line type="monotone" dataKey="borrows" stroke="#4C1D95" strokeWidth={2.5} dot={{ r: 2.5 }} activeDot={{ r: 4 }} />
                       <Line type="monotone" dataKey="returns" stroke="#16A34A" strokeWidth={2.5} dot={{ r: 2.5 }} activeDot={{ r: 4 }} />
@@ -328,7 +389,7 @@ export default function Dashboard() {
 
             <div className="bg-white rounded-xl border border-gray-300 shadow-md p-5">
               <h3 className="text-sm font-bold text-gray-800 mb-2">Top Borrowed Categories</h3>
-              {categoriesLoading ? (
+              {overviewLoading ? (
                 <div className="h-40 flex items-center justify-center text-xs font-semibold text-gray-400">Loading...</div>
               ) : categories.length === 0 ? (
                 <div className="h-40 flex items-center justify-center text-xs font-semibold text-gray-400">No borrow data yet.</div>
@@ -353,19 +414,19 @@ export default function Dashboard() {
                       </PieChart>
                     </ResponsiveContainer>
                     <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                      <span className="text-lg font-black text-gray-800">{totalCategoryBooks.toLocaleString()}</span>
+                      <span className="text-lg font-black text-gray-800">{totalCategoryBorrows.toLocaleString()}</span>
                       <span className="text-[10px] font-semibold text-gray-700">Borrows</span>
                     </div>
                   </div>
 
                   <div className="space-y-1.5 mt-3">
                     {categories.map((c) => (
-                      <div key={c.name} className="flex items-center justify-between text-xs">
-                        <span className="flex items-center gap-2 font-semibold text-gray-600">
-                          <span className="w-2 h-2 rounded-full" style={{ backgroundColor: c.color }} />
-                          {c.name}
+                      <div key={c.name} className="flex items-center justify-between text-xs gap-2">
+                        <span className="flex items-center gap-2 font-semibold text-gray-600 min-w-0">
+                          <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: c.color }} />
+                          <span className="truncate">{c.name}</span>
                         </span>
-                        <span className="font-bold text-gray-400">{c.pct} ({c.value})</span>
+                        <span className="font-bold text-gray-400 shrink-0">{c.pct} ({c.value})</span>
                       </div>
                     ))}
                   </div>
@@ -390,7 +451,7 @@ export default function Dashboard() {
                         <p className="text-xs font-bold text-gray-700 truncate">{text}</p>
                         <p className="text-[11px] text-gray-400 font-medium truncate">{detail}</p>
                       </div>
-                      <span className="ml-auto text-[10px] text-gray-700 font-semibold shrink-0">{formatTime(at)}</span>
+                      <span className="ml-auto text-[10px] text-gray-700 font-semibold shrink-0">{formatWhen(at)}</span>
                     </div>
                   ))
                 )}
@@ -404,23 +465,25 @@ export default function Dashboard() {
             </div>
           </div>
 
-          <div className="bg-white rounded-xl border border-gray-300 shadow-md p-5">
-            <h3 className="text-sm font-bold text-gray-800 mb-3.5">Quick Actions</h3>
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-              {QUICK_ACTIONS.map(({ label, icon: Icon, bg, color, path }) => (
-                <button
-                  key={label}
-                  onClick={() => navigate(path)}
-                  className="flex items-center gap-2.5 px-4 py-3 rounded-lg border border-gray-300 hover:bg-gray-50/80 transition text-left shadow-md"
-                >
-                  <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: bg, color }}>
-                    <Icon size={15} />
-                  </div>
-                  <span className="text-xs font-bold text-gray-700">{label}</span>
-                </button>
-              ))}
+          {visibleActions.length > 0 && (
+            <div className="bg-white rounded-xl border border-gray-300 shadow-md p-5">
+              <h3 className="text-sm font-bold text-gray-800 mb-3.5">Quick Actions</h3>
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                {visibleActions.map(({ label, icon: Icon, bg, color, path }) => (
+                  <button
+                    key={label}
+                    onClick={() => navigate(path)}
+                    className="flex items-center gap-2.5 px-4 py-3 rounded-lg border border-gray-300 hover:bg-gray-50/80 transition text-left shadow-md"
+                  >
+                    <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: bg, color }}>
+                      <Icon size={15} />
+                    </div>
+                    <span className="text-xs font-bold text-gray-700">{label}</span>
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
         </div>
     </div>

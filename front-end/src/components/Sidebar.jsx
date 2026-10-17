@@ -25,12 +25,13 @@ const navItems = [
   { label: "Dashboard", icon: LayoutDashboard, path: "/dashboard", roles: ["admin", "librarian"] },
   { label: "Staff", icon: UserCog, path: "/staff", roles: ["admin"] },
   { label: "Entry", icon: DoorOpen, path: "/entry", roles: ["admin", "librarian"]},
-  { label: "Inventory", icon: Library, path: "/inventory", roles: ["admin", "librarian"] },
+  { label: "Catalogue", icon: Library, path: "/inventory", roles: ["admin", "librarian"] },
   { label: "Member", icon: Users, path: "/member", roles: ["admin", "librarian"] },
   { label: "Borrow/Return", icon: ArrowLeftRight, path: "/borrow-return", roles: ["admin", "librarian"] },
-  { label: "FeedBack", icon: MessageSquare, path: "/feedback", roles: ["admin", "librarian"], module: "feedback" },
-  { label: "Event", icon: CalendarDays, path: "/event", roles: ["admin"] },
   { label: "Donations", icon: HeartHandshake, path: "/donations", roles: ["admin", "librarian"] },
+  { label: "Feedback", icon: MessageSquare, path: "/feedback", roles: ["admin", "librarian"], module: "feedback" },
+  { label: "Event", icon: CalendarDays, path: "/event", roles: ["admin"] },
+  
   {
     label: "Reports",
     icon: BarChart2,

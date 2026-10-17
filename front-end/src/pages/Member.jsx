@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import api from "../utils/api";
 import { useAuth } from "../hooks/useAuth";
@@ -480,10 +481,25 @@ export default function Member() {
   const [modal,      setModal]    = useState(null);
   const [selected,   setSelected] = useState(null);
 
+  const [searchParams, setSearchParams] = useSearchParams();
+
   useEffect(() => {
     fetchMembers();
     fetchMembershipTypes();
   }, []);
+
+  // Opens a member's profile when arriving from the navbar search (/member?open=ID)
+  useEffect(() => {
+    const openId = searchParams.get("open");
+    if (!openId || loading) return;
+
+    const target = members.find((m) => String(m.dbId) === openId);
+    if (target) {
+      setSelected(target);
+      setModal("profile");
+    }
+    setSearchParams({}, { replace: true }); // clear ?open so a refresh doesn't reopen it
+  }, [searchParams, members, loading]);
 
   const fetchMembers = async () => {
     try {
