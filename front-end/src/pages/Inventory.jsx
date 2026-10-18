@@ -6,7 +6,7 @@ import {
 } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import Navbar from "../components/Navbar";
-import api, { ASSET_BASE_URL } from "../utils/api";
+import api, { assetUrl } from "../utils/api";
 import { useAuth } from "../hooks/useAuth";
 
 const LANGUAGES = ["All Languages", "Khmer", "English", "French"];
@@ -898,7 +898,7 @@ export function BookDetails() {
                   <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Book Cover</p>
                   <div className="w-full h-56 bg-gray-50 border-2 border-gray-200 rounded-xl flex items-center justify-center p-4 mb-5 overflow-hidden">
                     {book.cover_image_url ? (
-                      <img src={`${ASSET_BASE_URL}${book.cover_image_url}`} alt={`${book.title} cover`} className="h-full object-contain rounded-md" />
+                      <img src={assetUrl(book.cover_image_url)} alt={`${book.title} cover`} className="h-full object-contain rounded-md" />
                     ) : (
                       <ImageIcon size={32} className="text-gray-300" />
                     )}
@@ -995,7 +995,7 @@ export function EditBook() {
           language: b.language || "English",
           description: b.description || "",
         });
-        setExistingCoverUrl(b.cover_image_url ? `${ASSET_BASE_URL}${b.cover_image_url}` : null);
+        setExistingCoverUrl(assetUrl(b.cover_image_url));
       } else {
         setNotFound(true);
       }

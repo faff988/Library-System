@@ -1,12 +1,13 @@
-const path = require('path');
-const fs = require('fs');
+// const path = require('path');
+// const fs = require('fs');
 const prisma = require('../lib/prisma');
 const ApiError = require('../utils/ApiError');
 const asyncHandler = require('../utils/asyncHandler');
 const logAction = require('../utils/logAction');
 const notify = require('../utils/notify');
 const { getPagination, buildMeta } = require('../utils/pagination');
-const { baseUploadsDir } = require('../middleware/upload');
+// const { baseUploadsDir } = require('../middleware/upload');
+const { deleteStoredImage, imageUrl } = require('../utils/imageStorage');
 
 const LANGUAGES = ['Khmer', 'English', 'French'];
 
@@ -56,7 +57,7 @@ function serializeBook(book) {
     ...book,
     status: computeStatus(book),
     borrowed_copies: (book.total_copies ?? 0) - (book.available_copies ?? 0),
-    cover_image_url: book.cover_image ? `/uploads/covers/${book.cover_image}` : null,
+   cover_image_url: imageUrl(book.cover_image, 'covers'),
   };
 }
 
@@ -65,14 +66,14 @@ function parseBoolean(value, defaultValue) {
   return value === true || value === 'true';
 }
 
-function deleteCoverFile(filename) {
-  const filePath = path.join(baseUploadsDir, 'covers', filename);
-  fs.unlink(filePath, (err) => {
-    if (err && err.code !== 'ENOENT') {
-      console.warn('⚠️ Failed to delete cover file:', filePath, err.message);
-    }
-  });
-}
+// function deleteCoverFile(filename) {
+//   const filePath = path.join(baseUploadsDir, 'covers', filename);
+//   fs.unlink(filePath, (err) => {
+//     if (err && err.code !== 'ENOENT') {
+//       console.warn('⚠️ Failed to delete cover file:', filePath, err.message);
+//     }
+//   });
+// }
 
 // GET /api/books
 const list = asyncHandler(async (req, res) => {
@@ -337,7 +338,7 @@ const update = asyncHandler(async (req, res) => {
 
   const book = await prisma.books.update({ where: { book_id: id }, data });
 
-  if (oldCoverToDelete) deleteCoverFile(oldCoverToDelete);
+if (oldCoverToDelete) deleteStoredImage(oldCoverToDelete, 'covers');
 
   await logAction({ userId: req.user?.userId, action: 'UPDATE', tableName: 'books', recordId: id, req });
 
@@ -367,7 +368,7 @@ const remove = asyncHandler(async (req, res) => {
     throw error;
   }
 
-  if (existing.cover_image) deleteCoverFile(existing.cover_image);
+if (existing.cover_image) deleteStoredImage(existing.cover_image, 'covers');
 
   await logAction({ userId: req.user?.userId, action: 'DELETE', tableName: 'books', recordId: id, req });
 

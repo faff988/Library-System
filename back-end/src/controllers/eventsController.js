@@ -1,9 +1,6 @@
 // controllers/eventsController.js
-const path = require('path');
-const fs = require('fs');
 const prisma = require('../lib/prisma');
-
-const { baseUploadsDir } = require('../middleware/upload');
+const { deleteStoredImage, imageUrl } = require('../utils/imageStorage');
 
 // Must match the `events_event_category` enum in schema.prisma
 const EVENT_CATEGORIES = ['discussion', 'special', 'children', 'workshop'];
@@ -35,19 +32,9 @@ function parseDateInput(dateStr) {
 function serializeEvent(event) {
   return {
     ...event,
-    event_image_url: event.event_image ? `/uploads/events/${event.event_image}` : null,
+    event_image_url: imageUrl(event.event_image, 'events'),
     is_past: new Date(event.event_date) < new Date(new Date().toDateString()),
   };
-}
-
-function deleteEventImageFile(filename) {
-  if (!filename) return;
-  const filePath = path.join(baseUploadsDir, 'events', filename);
-  fs.unlink(filePath, (err) => {
-    if (err && err.code !== 'ENOENT') {
-      console.warn('⚠️ Failed to delete event image file:', filePath, err.message);
-    }
-  });
 }
 
 // The admin form (EventsPage.jsx) posts FormData with keys: title, category,
@@ -111,25 +98,32 @@ const create = async (req, res) => {
   const max_attendance = pickField(req.body, 'maxAttendance', 'max_attendance');
   const location = pickField(req.body, 'location', 'location');
 
+  // If validation fails after the image was already uploaded to Cloudinary,
+  // remove it again so no orphaned image is left behind.
+  const reject = (status, error) => {
+    if (req.file) deleteStoredImage(req.file.filename, 'events');
+    return res.status(status).json({ error });
+  };
+
   if (!event_title || !event_title.trim()) {
-    return res.status(400).json({ error: 'Event title is required.' });
+    return reject(400, 'Event title is required.');
   }
   if (!EVENT_CATEGORIES.includes(event_category)) {
-    return res.status(400).json({ error: `Category must be one of: ${EVENT_CATEGORIES.join(', ')}` });
+    return reject(400, `Category must be one of: ${EVENT_CATEGORIES.join(', ')}`);
   }
   const parsedDate = parseDateInput(event_date);
   if (!parsedDate) {
-    return res.status(400).json({ error: 'A valid event_date (YYYY-MM-DD) is required.' });
+    return reject(400, 'A valid event_date (YYYY-MM-DD) is required.');
   }
   const parsedTime = parseTimeInput(event_time);
   if (!parsedTime) {
-    return res.status(400).json({ error: 'A valid event_time (HH:MM) is required.' });
+    return reject(400, 'A valid event_time (HH:MM) is required.');
   }
   let attendance = null;
   if (max_attendance !== undefined && max_attendance !== null && max_attendance !== '') {
     attendance = Number(max_attendance);
     if (!Number.isInteger(attendance) || attendance < 0) {
-      return res.status(400).json({ error: 'max_attendance must be a non-negative integer.' });
+      return reject(400, 'max_attendance must be a non-negative integer.');
     }
   }
 
@@ -143,8 +137,8 @@ const create = async (req, res) => {
         event_time: parsedTime,
         max_attendance: attendance,
         location: location ? String(location).trim() : null,
-        // multer (uploadEventImage.single('eventImage')) puts the saved
-        // filename on req.file.
+        // multer + the Cloudinary step in middleware/upload.js put the full
+        // image URL on req.file.filename.
         event_image: req.file ? req.file.filename : null,
       },
     });
@@ -158,7 +152,7 @@ const create = async (req, res) => {
     });
   } catch (err) {
     console.error('Error creating event:', err);
-    if (req.file) deleteEventImageFile(req.file.filename);
+    if (req.file) deleteStoredImage(req.file.filename, 'events');
     return res.status(500).json({ error: 'Failed to create this event.' });
   }
 };
@@ -167,10 +161,16 @@ const create = async (req, res) => {
 const update = async (req, res) => {
   try {
     const id = Number(req.params.id);
-    if (!Number.isInteger(id)) return res.status(400).json({ error: 'Invalid event id.' });
+    if (!Number.isInteger(id)) {
+      if (req.file) deleteStoredImage(req.file.filename, 'events');
+      return res.status(400).json({ error: 'Invalid event id.' });
+    }
 
     const existing = await prisma.events.findUnique({ where: { event_id: id } });
-    if (!existing) return res.status(404).json({ error: 'Event not found.' });
+    if (!existing) {
+      if (req.file) deleteStoredImage(req.file.filename, 'events');
+      return res.status(404).json({ error: 'Event not found.' });
+    }
 
     const event_title = pickField(req.body, 'title', 'event_title');
     const event_category = pickField(req.body, 'category', 'event_category');
@@ -181,8 +181,13 @@ const update = async (req, res) => {
     const removeImage = pickField(req.body, 'removeImage', 'removeImage');
     const location = pickField(req.body, 'location', 'location');
 
+    const reject = (status, error) => {
+      if (req.file) deleteStoredImage(req.file.filename, 'events');
+      return res.status(status).json({ error });
+    };
+
     if (event_category !== undefined && event_category !== '' && !EVENT_CATEGORIES.includes(event_category)) {
-      return res.status(400).json({ error: `Category must be one of: ${EVENT_CATEGORIES.join(', ')}` });
+      return reject(400, `Category must be one of: ${EVENT_CATEGORIES.join(', ')}`);
     }
 
     const data = {
@@ -194,12 +199,12 @@ const update = async (req, res) => {
 
     if (event_date !== undefined) {
       const parsedDate = parseDateInput(event_date);
-      if (!parsedDate) return res.status(400).json({ error: 'Invalid event_date.' });
+      if (!parsedDate) return reject(400, 'Invalid event_date.');
       data.event_date = parsedDate;
     }
     if (event_time !== undefined) {
       const parsedTime = parseTimeInput(event_time);
-      if (!parsedTime) return res.status(400).json({ error: 'Invalid event_time.' });
+      if (!parsedTime) return reject(400, 'Invalid event_time.');
       data.event_time = parsedTime;
     }
     if (max_attendance !== undefined) {
@@ -208,7 +213,7 @@ const update = async (req, res) => {
       } else {
         const attendance = Number(max_attendance);
         if (!Number.isInteger(attendance) || attendance < 0) {
-          return res.status(400).json({ error: 'max_attendance must be a non-negative integer.' });
+          return reject(400, 'max_attendance must be a non-negative integer.');
         }
         data.max_attendance = attendance;
       }
@@ -228,7 +233,7 @@ const update = async (req, res) => {
 
     const updated = await prisma.events.update({ where: { event_id: id }, data });
 
-    if (oldImageToDelete) deleteEventImageFile(oldImageToDelete);
+    if (oldImageToDelete) deleteStoredImage(oldImageToDelete, 'events');
 
     const serialized = serializeEvent(updated);
     return res.json({
@@ -239,7 +244,7 @@ const update = async (req, res) => {
     });
   } catch (err) {
     console.error('Error updating event:', err);
-    if (req.file) deleteEventImageFile(req.file.filename);
+    if (req.file) deleteStoredImage(req.file.filename, 'events');
     return res.status(500).json({ error: 'Failed to update this event.' });
   }
 };
@@ -255,7 +260,7 @@ const remove = async (req, res) => {
 
     await prisma.events.delete({ where: { event_id: id } });
 
-    if (existing.event_image) deleteEventImageFile(existing.event_image);
+    if (existing.event_image) deleteStoredImage(existing.event_image, 'events');
 
     return res.json({ success: true, message: 'Event deleted.' });
   } catch (err) {

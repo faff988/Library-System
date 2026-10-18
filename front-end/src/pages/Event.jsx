@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import Navbar from "../components/Navbar";
-import api, { ASSET_BASE_URL } from "../utils/api";
+import api, { assetUrl } from "../utils/api";
 import {
   Calendar,
   Clock,
@@ -73,7 +73,7 @@ function mapEvent(e) {
     timeValue: toTimeInputValue(e.event_time),
     maxAttendance: e.max_attendance,
     description: e.description || "",
-    image: e.event_image_url ? `${ASSET_BASE_URL}${e.event_image_url}` : null,
+    image: assetUrl(e.event_image_url),
     location: e.location || DEFAULT_LOCATION,
   };
 }
