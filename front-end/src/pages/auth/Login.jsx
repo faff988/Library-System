@@ -4,6 +4,28 @@ import { Link, useNavigate, useLocation } from "react-router-dom";
 import logo from '../../assets/logo.png';
 import api from "../../utils/api";
 
+const parseJson = (v) => {
+  if (!v) return {};
+  if (typeof v === "object") return v;
+  try { return JSON.parse(v); } catch { return {}; }
+};
+
+// Merge override > user > role (same order as the server) into a real object.
+function buildEffectivePermissions(user) {
+  const role = parseJson(user.roles?.permissions);
+  const own = parseJson(user.permissions);
+  const over = parseJson(user.permission_overrides);
+  const permissions = {};
+  const modules = new Set([...Object.keys(role), ...Object.keys(own), ...Object.keys(over)]);
+  for (const m of modules) {
+    permissions[m] = {};
+    for (const a of ["create", "read", "update", "delete"]) {
+      permissions[m][a] = Boolean(over[m]?.[a] ?? own[m]?.[a] ?? role[m]?.[a] ?? (a === "read"));
+    }
+  }
+  return permissions;
+}
+
 export default function Login() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -31,8 +53,10 @@ export default function Login() {
 
       if (response.data?.success) {
         const { user, token } = response.data.data;
+        const permissions = buildEffectivePermissions(user);
+
         localStorage.setItem("token", token);
-        localStorage.setItem("user", JSON.stringify(user));
+        localStorage.setItem("user", JSON.stringify({ ...user, permissions }));
         navigate("/dashboard");
       }
     } catch (err) {

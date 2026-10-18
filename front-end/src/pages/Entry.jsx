@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import {
-  Users, Building2, LogOut, UserPlus, Plus, Search, Filter, Calendar,
+  Users, Building2, LogOut, UserPlus, Plus, Search, Calendar,
   ChevronLeft, ChevronRight, User, Phone, Info, X, Check, AlertCircle, Loader2,
+  Edit3, Trash2,
 } from "lucide-react";
 import Navbar from "../components/Navbar";
 import api from "../utils/api";
@@ -18,7 +19,7 @@ const purposeStyle = {
 
 const tableGridStyle = {
   display: "grid",
-  gridTemplateColumns: "130px 1.6fr 110px 110px 100px 110px",
+  gridTemplateColumns: "130px 1.6fr 110px 110px 100px 110px 150px",
   alignItems: "center",
   gap: "1rem",
   paddingLeft: "1.5rem",
@@ -79,8 +80,34 @@ function mapEntry(row) {
   };
 }
 
+// ─── Delete confirmation ─────────────────────────────────────────────────
+function DeleteModal({ entry, deleting, onClose, onConfirm }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm mx-4 overflow-hidden border-2 border-gray-400">
+        <div className="bg-red-500 px-6 py-4 flex items-center justify-between">
+          <h3 className="text-white font-bold text-base">Delete Entry</h3>
+          <button onClick={onClose} className="text-white/70 hover:text-white transition"><X size={18} /></button>
+        </div>
+        <div className="p-6">
+          <p className="text-sm text-gray-600 font-medium">
+            Are you sure you want to delete the entry for{" "}
+            <span className="font-bold text-gray-800">{entry.member_name}</span> ({entry.id})? This action cannot be undone.
+          </p>
+        </div>
+        <div className="px-6 pb-6 flex justify-end gap-3">
+          <button onClick={onClose} className="px-5 py-2.5 bg-white border-2 border-gray-300 text-gray-600 rounded-lg text-sm font-bold hover:bg-gray-50 transition">Cancel</button>
+          <button disabled={deleting} onClick={onConfirm} className="flex items-center gap-2 bg-red-500 text-white text-sm font-bold px-6 py-2.5 rounded-lg hover:bg-red-600 transition shadow-sm disabled:opacity-60">
+            <Trash2 size={14} /> {deleting ? "Deleting..." : "Delete"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── EntryList ───────────────────────────────────────────────────────────
-function EntryList({ data, loading, onAdd }) {
+function EntryList({ data, loading, onAdd, onEdit, onDelete }) {
   const [search, setSearch]           = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 5;
@@ -150,7 +177,7 @@ function EntryList({ data, loading, onAdd }) {
           </div>
 
           <div style={{ overflowX: "auto", width: "100%" }}>
-            <div style={{ minWidth: "820px" }}>
+            <div style={{ minWidth: "960px" }}>
               <div style={{ ...tableGridStyle, paddingTop: "0.75rem", paddingBottom: "0.75rem" }} className="border-b border-gray-300 bg-gray-50/70 text-xs font-bold uppercase tracking-wider">
                 <span style={{ color: "#055E83" }}>Attendance ID</span>
                 <span style={{ color: "#055E83" }}>Member</span>
@@ -158,6 +185,7 @@ function EntryList({ data, loading, onAdd }) {
                 <span style={{ color: "#055E83" }}>Date</span>
                 <span style={{ color: "#055E83" }}>Check-In</span>
                 <span style={{ color: "#055E83", textAlign: "center" }}>Purpose</span>
+                <span style={{ color: "#055E83", textAlign: "center" }}>Actions</span>
               </div>
 
               {loading ? (
@@ -191,6 +219,21 @@ function EntryList({ data, loading, onAdd }) {
                           <span className="text-xs text-gray-300">—</span>
                         )}
                       </div>
+                      <div className="flex items-center justify-center gap-1.5">
+                        <button
+                          onClick={() => onEdit(a)}
+                          className="flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-bold hover:opacity-85 transition shadow-sm"
+                          style={{ backgroundColor: "#E8C110", color: "#055E83" }}
+                        >
+                          <Edit3 size={12} /> Edit
+                        </button>
+                        <button
+                          onClick={() => onDelete(a)}
+                          className="flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs font-bold hover:opacity-85 transition shadow-sm bg-red-50 text-red-500 border border-red-100"
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      </div>
                     </div>
                   );
                 })
@@ -211,15 +254,26 @@ function EntryList({ data, loading, onAdd }) {
   );
 }
 
-// ─── AddEntry ────────────────────────────────────────────────────────────
-function AddEntry({ onCancel, onSave }) {
+// ─── AddEntry (also used for editing when `entry` is passed) ─────────────
+function AddEntry({ entry, onCancel, onSave }) {
+  const isEdit = Boolean(entry);
+
   const [isMemberMode, setIsMemberMode] = useState(false); // ON = search existing member, OFF = manual walk-in
   const [memberQuery, setMemberQuery] = useState("");
   const [memberResults, setMemberResults] = useState([]);
   const [searchingMembers, setSearchingMembers] = useState(false);
   const [selectedMember, setSelectedMember] = useState(null);
 
-  const [form, setForm] = useState({ fullName: "", age: "", phone: "", purpose: "" });
+  const [form, setForm] = useState(() =>
+    isEdit
+      ? {
+          fullName: entry.member_name || "",
+          age: entry.age != null ? String(entry.age) : "",
+          phone: entry.phone || "",
+          purpose: entry.purpose || "",
+        }
+      : { fullName: "", age: "", phone: "", purpose: "" }
+  );
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -275,7 +329,11 @@ function AddEntry({ onCancel, onSave }) {
   };
 
   const clearForm = () => {
-    setForm({ fullName: "", age: "", phone: "", purpose: "" });
+    setForm(
+      isEdit
+        ? { fullName: entry.member_name || "", age: entry.age != null ? String(entry.age) : "", phone: entry.phone || "", purpose: entry.purpose || "" }
+        : { fullName: "", age: "", phone: "", purpose: "" }
+    );
     setMemberQuery("");
     setSelectedMember(null);
     setMemberResults([]);
@@ -301,10 +359,14 @@ function AddEntry({ onCancel, onSave }) {
       const payload = {
         attendeeName: form.fullName.trim(),
         age: Number(form.age),
-        phoneNumber: form.phone || undefined,
+        phoneNumber: form.phone,
         purpose: form.purpose,
       };
-      await api.post("/library-entries", payload);
+      if (isEdit) {
+        await api.put(`/library-entries/${entry.entryId}`, payload);
+      } else {
+        await api.post("/library-entries", payload);
+      }
       onSave();
     } catch (err) {
       console.error("Failed to save entry:", err);
@@ -317,11 +379,15 @@ function AddEntry({ onCancel, onSave }) {
 
   return (
     <div>
-      <Navbar title="Entry" breadcrumb="Entry > Add Entry" onBack={onCancel} />
+      <Navbar title="Entry" breadcrumb={isEdit ? "Entry > Edit Entry" : "Entry > Add Entry"} onBack={onCancel} />
       <div className="px-14 py-10 max-w-5xl mx-auto space-y-5">
         <div>
-          <h2 className="text-2xl font-bold text-[#055E83]">Add Entry</h2>
-          <p className="text-sm text-gray-400">Log a new visitor or member check-in to the attendance record.</p>
+          <h2 className="text-2xl font-bold text-[#055E83]">{isEdit ? "Edit Entry" : "Add Entry"}</h2>
+          <p className="text-sm text-gray-400">
+            {isEdit
+              ? `Update the details for ${entry.id}.`
+              : "Log a new visitor or member check-in to the attendance record."}
+          </p>
         </div>
 
         {error && (
@@ -334,24 +400,26 @@ function AddEntry({ onCancel, onSave }) {
         <div className="bg-white rounded-xl border border-gray-400 overflow-hidden shadow-md">
           <div className="p-6 space-y-6">
 
-            {/* MEMBER TOGGLE BANNER */}
-            <div
-              onClick={handleToggleMode}
-              className="flex items-center gap-3 rounded-xl border border-[#DCEAF3] bg-[#EEF6FB] px-4 py-3 cursor-pointer select-none"
-            >
-              <button
-                type="button"
-                className={`relative w-9 h-5 rounded-full transition shrink-0 ${isMemberMode ? "bg-[#055E83]" : "bg-gray-400"}`}
+            {/* MEMBER TOGGLE BANNER (new entries only) */}
+            {!isEdit && (
+              <div
+                onClick={handleToggleMode}
+                className="flex items-center gap-3 rounded-xl border border-[#DCEAF3] bg-[#EEF6FB] px-4 py-3 cursor-pointer select-none"
               >
-                <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-md transition-all ${isMemberMode ? "left-4" : "left-0.5"}`} />
-              </button>
-              <p className="text-xs font-bold text-[#055E83]">
-                {isMemberMode ? "Existing Member — search to autofill" : "Walk-in Visitor — enter details manually"}
-              </p>
-              <Info size={13} className="text-[#055E83]/60" />
-            </div>
+                <button
+                  type="button"
+                  className={`relative w-9 h-5 rounded-full transition shrink-0 ${isMemberMode ? "bg-[#055E83]" : "bg-gray-400"}`}
+                >
+                  <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-md transition-all ${isMemberMode ? "left-4" : "left-0.5"}`} />
+                </button>
+                <p className="text-xs font-bold text-[#055E83]">
+                  {isMemberMode ? "Existing Member — search to autofill" : "Walk-in Visitor — enter details manually"}
+                </p>
+                <Info size={13} className="text-[#055E83]/60" />
+              </div>
+            )}
 
-            {isMemberMode ? (
+            {isMemberMode && !isEdit ? (
               <>
                 {/* MEMBER SEARCH MODE */}
                 <div className="space-y-3">
@@ -454,7 +522,7 @@ function AddEntry({ onCancel, onSave }) {
               </>
             ) : (
               <>
-                {/* MANUAL ENTRY MODE */}
+                {/* MANUAL ENTRY MODE (also used for editing) */}
                 <div className="space-y-4">
                   <div className="flex items-center gap-2.5">
                     <span className="w-5 h-5 rounded-full bg-[#055E83] text-white text-[11px] font-black flex items-center justify-center shrink-0">1</span>
@@ -502,10 +570,10 @@ function AddEntry({ onCancel, onSave }) {
 
         <div className="flex justify-end gap-3 pt-1">
           <button onClick={clearForm} disabled={saving} className="flex items-center gap-1.5 text-sm text-gray-500 font-semibold px-4 py-2 hover:text-gray-700 transition disabled:opacity-60">
-            <X size={14} /> Clear Form
+            <X size={14} /> {isEdit ? "Reset" : "Clear Form"}
           </button>
           <button onClick={handleSave} disabled={saving} className="bg-[#055E83] text-white text-sm font-bold px-6 py-2.5 rounded-lg flex items-center gap-2 shadow-sm hover:opacity-90 transition disabled:opacity-60">
-            <Check size={14} /> {saving ? "Saving..." : "Save"}
+            <Check size={14} /> {saving ? "Saving..." : isEdit ? "Save Changes" : "Save"}
           </button>
         </div>
       </div>
@@ -515,9 +583,12 @@ function AddEntry({ onCancel, onSave }) {
 
 // ─── Root Router ─────────────────────────────────────────────────────────
 export default function Entry() {
-  const [page, setPage] = useState("list");
+  const [page, setPage] = useState("list"); // "list" | "add" | "edit"
   const [entriesList, setEntriesList] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [editing, setEditing] = useState(null);
+  const [toDelete, setToDelete] = useState(null);
+  const [deleting, setDeleting] = useState(false);
 
   const fetchEntries = useCallback(async () => {
     try {
@@ -537,6 +608,21 @@ export default function Entry() {
     fetchEntries();
   }, [fetchEntries]);
 
+  const handleDelete = async () => {
+    try {
+      setDeleting(true);
+      await api.delete(`/library-entries/${toDelete.entryId}`);
+      await fetchEntries();
+    } catch (err) {
+      console.error("Failed to delete entry:", err);
+      const backendMessage = err.response?.data?.error || err.response?.data?.message;
+      alert(backendMessage || "Failed to delete the entry.");
+    } finally {
+      setDeleting(false);
+      setToDelete(null);
+    }
+  };
+
   const renderPage = () => {
     switch (page) {
       case "add":
@@ -549,14 +635,42 @@ export default function Entry() {
             }}
           />
         );
+      case "edit":
+        return (
+          <AddEntry
+            entry={editing}
+            onCancel={() => { setEditing(null); setPage("list"); }}
+            onSave={async () => {
+              await fetchEntries();
+              setEditing(null);
+              setPage("list");
+            }}
+          />
+        );
       default:
-        return <EntryList data={entriesList} loading={loading} onAdd={() => setPage("add")} />;
+        return (
+          <EntryList
+            data={entriesList}
+            loading={loading}
+            onAdd={() => setPage("add")}
+            onEdit={(a) => { setEditing(a); setPage("edit"); }}
+            onDelete={(a) => setToDelete(a)}
+          />
+        );
     }
   };
 
   return (
     <div className="flex-1 min-w-0 bg-[#E9EEF4]">
         {renderPage()}
+        {toDelete && (
+          <DeleteModal
+            entry={toDelete}
+            deleting={deleting}
+            onClose={() => setToDelete(null)}
+            onConfirm={handleDelete}
+          />
+        )}
     </div>
   );
 }

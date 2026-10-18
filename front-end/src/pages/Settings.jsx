@@ -4,7 +4,7 @@ import api from "../utils/api";
 import {
   User, Settings2, Edit2, CheckCircle2, Save, Lock, Bell, Library, Shield,
   ShieldCheck, Eye, EyeOff, Monitor, Mail, BookOpen, Plus, Edit3, AlertCircle,
-  X, LogOut, DatabaseBackup, Download, RotateCcw, Trash2, RefreshCw,
+  X, LogOut, DatabaseBackup,
 } from "lucide-react";
 
 const TABS = [
@@ -696,262 +696,27 @@ function LibraryConfigTab() {
   );
 }
 
-function formatBytes(bytes) {
-  if (bytes === 0) return "0 B";
-  const units = ["B", "KB", "MB", "GB"];
-  const i = Math.floor(Math.log(bytes) / Math.log(1024));
-  return `${(bytes / Math.pow(1024, i)).toFixed(1)} ${units[i]}`;
-}
-
-function formatBackupDate(iso) {
-  return new Date(iso).toLocaleString("en-US", {
-    month: "short", day: "2-digit", year: "numeric", hour: "numeric", minute: "2-digit",
-  });
-}
-
-function RestoreConfirmModal({ backup, onCancel, onConfirm, loading }) {
-  const [typed, setTyped] = useState("");
-  if (!backup) return null;
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-      <div className="bg-white rounded-xl shadow-lg w-full max-w-md overflow-hidden">
-        <div className="p-6 space-y-3">
-          <div className="w-11 h-11 rounded-full bg-red-50 flex items-center justify-center">
-            <RotateCcw size={18} className="text-red-500" />
-          </div>
-          <h4 className="text-base font-bold text-gray-800">Restore this backup?</h4>
-          <p className="text-sm text-gray-500">
-            This will <span className="font-bold text-red-600">permanently overwrite</span> everything currently in the database with the contents of{" "}
-            <span className="font-mono text-xs bg-gray-100 px-1.5 py-0.5 rounded">{backup.filename}</span> (taken {formatBackupDate(backup.createdAt)}).
-            Anything added or changed since then will be lost. This cannot be undone.
-          </p>
-          <div>
-            <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-1.5">
-              Type RESTORE to confirm
-            </label>
-            <input
-              value={typed}
-              onChange={(e) => setTyped(e.target.value)}
-              className={inputCls}
-              placeholder="RESTORE"
-              autoFocus
-            />
-          </div>
-        </div>
-        <div className="flex justify-end gap-2 px-6 py-4 bg-gray-50">
-          <button onClick={onCancel} disabled={loading} className="px-4 py-2 text-sm font-bold text-gray-600 border border-gray-200 rounded-lg hover:bg-white transition disabled:opacity-50">
-            Cancel
-          </button>
-          <button
-            onClick={onConfirm}
-            disabled={loading || typed !== "RESTORE"}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-bold text-white bg-red-500 rounded-lg hover:bg-red-600 transition disabled:opacity-40"
-          >
-            <RotateCcw size={14} /> {loading ? "Restoring..." : "Restore Database"}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function DeleteBackupModal({ backup, onCancel, onConfirm, loading }) {
-  if (!backup) return null;
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-      <div className="bg-white rounded-xl shadow-lg w-full max-w-sm overflow-hidden">
-        <div className="p-6 space-y-3">
-          <div className="w-11 h-11 rounded-full bg-red-50 flex items-center justify-center">
-            <Trash2 size={18} className="text-red-500" />
-          </div>
-          <h4 className="text-base font-bold text-gray-800">Delete this backup?</h4>
-          <p className="text-sm text-gray-500">
-            <span className="font-mono text-xs bg-gray-100 px-1.5 py-0.5 rounded">{backup.filename}</span> will be permanently removed from the server.
-          </p>
-        </div>
-        <div className="flex justify-end gap-2 px-6 py-4 bg-gray-50">
-          <button onClick={onCancel} disabled={loading} className="px-4 py-2 text-sm font-bold text-gray-600 border border-gray-200 rounded-lg hover:bg-white transition disabled:opacity-50">
-            Cancel
-          </button>
-          <button onClick={onConfirm} disabled={loading} className="flex items-center gap-2 px-4 py-2 text-sm font-bold text-white bg-red-500 rounded-lg hover:bg-red-600 transition disabled:opacity-50">
-            <Trash2 size={14} /> {loading ? "Deleting..." : "Delete"}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
+// ─── Tab: Backup & Restore ───────────────────────────────────────────────────
+// Backups are handled by the database host (Aiven), so this tab only explains
+// the process. No API calls are made from here.
 function BackupRestoreTab() {
-  const [backups, setBackups] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [creating, setCreating] = useState(false);
-  const [banner, setBanner] = useState({ type: "", message: "" });
-  const [restoreTarget, setRestoreTarget] = useState(null);
-  const [restoring, setRestoring] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState(null);
-  const [deleting, setDeleting] = useState(false);
-  const [downloadingFile, setDownloadingFile] = useState(null);
-
-  useEffect(() => {
-    fetchBackups();
-  }, []);
-
-  const fetchBackups = async () => {
-    try {
-      setLoading(true);
-      const res = await api.get("/backups");
-      if (res.data?.success) setBackups(res.data.data);
-    } catch (err) {
-      setBanner({ type: "error", message: err.response?.data?.message || "Failed to load backups." });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleCreate = async () => {
-    setBanner({ type: "", message: "" });
-    try {
-      setCreating(true);
-      const res = await api.post("/backups");
-      if (res.data?.success) {
-        setBanner({ type: "success", message: `Backup "${res.data.data.filename}" created successfully.` });
-        await fetchBackups();
-      }
-    } catch (err) {
-      setBanner({ type: "error", message: err.response?.data?.message || "Failed to create backup." });
-    } finally {
-      setCreating(false);
-    }
-  };
-
-  const handleDownload = async (backup) => {
-    try {
-      setDownloadingFile(backup.filename);
-      const res = await api.get(`/backups/${backup.filename}/download`, { responseType: "blob" });
-      const url = URL.createObjectURL(new Blob([res.data]));
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = backup.filename;
-      link.click();
-      URL.revokeObjectURL(url);
-    } catch (err) {
-      setBanner({ type: "error", message: "Failed to download backup." });
-    } finally {
-      setDownloadingFile(null);
-    }
-  };
-
-  const handleRestoreConfirm = async () => {
-    setRestoring(true);
-    try {
-      const res = await api.post(`/backups/${restoreTarget.filename}/restore`, { confirm: true });
-      if (res.data?.success) {
-        setBanner({ type: "success", message: res.data.message || "Database restored successfully." });
-      }
-    } catch (err) {
-      setBanner({ type: "error", message: err.response?.data?.message || "Failed to restore backup." });
-    } finally {
-      setRestoring(false);
-      setRestoreTarget(null);
-    }
-  };
-
-  const handleDeleteConfirm = async () => {
-    setDeleting(true);
-    try {
-      await api.delete(`/backups/${deleteTarget.filename}`);
-      setBanner({ type: "success", message: "Backup deleted." });
-      await fetchBackups();
-    } catch (err) {
-      setBanner({ type: "error", message: err.response?.data?.message || "Failed to delete backup." });
-    } finally {
-      setDeleting(false);
-      setDeleteTarget(null);
-    }
-  };
-
   return (
     <div className="space-y-5 pb-12">
-      {banner.message && (
-        <div className={`p-4 rounded-lg flex items-center gap-3 text-sm font-medium border ${
-          banner.type === "success" ? "bg-green-50 border-green-200 text-green-700" : "bg-red-50 border-red-200 text-red-700"
-        }`}>
-          {banner.type === "success" ? <CheckCircle2 size={18} className="text-green-500 flex-shrink-0" /> : <AlertCircle size={18} className="text-red-500 flex-shrink-0" />}
-          <span>{banner.message}</span>
-        </div>
-      )}
-
       <section className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-        <div className="px-6 py-3 flex items-center justify-between bg-[#1B4965]">
-          <div className="flex items-center gap-2">
-            <DatabaseBackup size={15} className="text-[#F5C842]" />
-            <h3 className="font-bold text-sm tracking-wide text-white">Database Backups</h3>
-          </div>
-          <div className="flex items-center gap-2">
-            <button onClick={fetchBackups} className="p-1.5 text-white/70 hover:text-white transition" title="Refresh list">
-              <RefreshCw size={14} />
-            </button>
-            <button
-              onClick={handleCreate}
-              disabled={creating}
-              className="flex items-center gap-1.5 bg-[#F5C842] text-[#1B4965] text-xs font-bold px-3 py-2 rounded-lg hover:opacity-90 transition disabled:opacity-60"
-            >
-              <DatabaseBackup size={13} /> {creating ? "Creating..." : "Create Backup Now"}
-            </button>
-          </div>
-        </div>
-
-        <div className="p-5">
-          <p className="text-xs text-gray-400 mb-4">
-            Backups include all library data and business logic (triggers), but not uploaded book covers or event images. Available to Admin and Librarian roles.
+        <SectionHeader icon={DatabaseBackup} title="Database Backups" />
+        <div className="p-7 space-y-3 text-sm text-gray-600">
+          <p>
+            Database backups are taken automatically by the hosting provider (Aiven).
+            To restore data, an administrator creates a fork from a backup in the Aiven
+            console under <span className="font-bold">Backups → Fork &amp; restore</span>,
+            then points the system's database connection at the restored copy.
           </p>
-
-          {loading ? (
-            <p className="text-sm text-gray-400 py-6 text-center">Loading backups...</p>
-          ) : backups.length === 0 ? (
-            <p className="text-sm text-gray-400 py-6 text-center">No backups yet — create one above.</p>
-          ) : (
-            <div className="space-y-2">
-              {backups.map((b) => (
-                <div key={b.filename} className="flex items-center justify-between border border-gray-100 rounded-xl p-4 hover:bg-slate-50/50 transition">
-                  <div className="min-w-0">
-                    <p className="text-sm font-bold text-gray-800 truncate">{formatBackupDate(b.createdAt)}</p>
-                    <p className="text-xs text-gray-400 font-mono truncate mt-0.5">{b.filename} · {formatBytes(b.sizeBytes)}</p>
-                  </div>
-                  <div className="flex items-center gap-1.5 shrink-0 ml-4">
-                    <button
-                      onClick={() => handleDownload(b)}
-                      disabled={downloadingFile === b.filename}
-                      className="p-2 text-gray-400 hover:text-[#1B4965] hover:bg-blue-50 rounded-lg transition disabled:opacity-50"
-                      title="Download"
-                    >
-                      <Download size={15} />
-                    </button>
-                    <button
-                      onClick={() => setRestoreTarget(b)}
-                      className="p-2 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition"
-                      title="Restore"
-                    >
-                      <RotateCcw size={15} />
-                    </button>
-                    <button
-                      onClick={() => setDeleteTarget(b)}
-                      className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition"
-                      title="Delete"
-                    >
-                      <Trash2 size={15} />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+          <p className="text-xs text-gray-400">
+            Uploaded book covers and event images are stored separately in Cloudinary and
+            are not part of the database backup.
+          </p>
         </div>
       </section>
-
-      <RestoreConfirmModal backup={restoreTarget} loading={restoring} onCancel={() => setRestoreTarget(null)} onConfirm={handleRestoreConfirm} />
-      <DeleteBackupModal backup={deleteTarget} loading={deleting} onCancel={() => setDeleteTarget(null)} onConfirm={handleDeleteConfirm} />
     </div>
   );
 }

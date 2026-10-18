@@ -70,7 +70,7 @@ export default function App() {
           <Route path="/reports/transactions" element={<DailyWeeklyMonthlyTransactionReport />} />
           <Route path="/reports/member" element={<MemberReport />} />
 
-          {/* Admin-only pages and reports */}
+          {/* Admin-only: staff accounts and permissions */}
           <Route
             path="/staff"
             element={

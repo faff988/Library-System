@@ -3,6 +3,8 @@ const ApiError = require('../utils/ApiError');
 const asyncHandler = require('../utils/asyncHandler');
 const { getPagination, buildMeta } = require('../utils/pagination');
 
+const VALID_PURPOSES = ['Research', 'Study', 'Reading', 'Event', 'Other'];
+
 /** GET /api/library-entries?search=&startDate=&endDate=&page=&limit= */
 const list = asyncHandler(async (req, res) => {
   const { search, startDate, endDate } = req.query;
@@ -53,12 +55,22 @@ const create = asyncHandler(async (req, res) => {
     throw ApiError.badRequest('age must be a valid integer');
   }
 
+  // Remove spaces and dashes; the column holds at most 15 characters.
+  const phone = phoneNumber ? String(phoneNumber).replace(/[\s-]/g, '') : null;
+  if (phone && phone.length > 15) {
+    throw ApiError.badRequest('Phone number must be 15 characters or fewer');
+  }
+
+  if (purpose && !VALID_PURPOSES.includes(purpose)) {
+    throw ApiError.badRequest(`purpose must be one of: ${VALID_PURPOSES.join(', ')}`);
+  }
+
   const entry = await prisma.library_entries.create({
     data: {
       attendee_name: attendeeName.trim(),
       age: ageNum,
       address: address || null,
-      phone_number: phoneNumber || null,
+      phone_number: phone,
       ...(purpose ? { purpose } : {}),
     },
   });

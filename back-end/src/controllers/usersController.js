@@ -6,31 +6,40 @@ const logAction = require('../utils/logAction');
 const { getPagination, buildMeta } = require('../utils/pagination');
 
 const SALT_ROUNDS = 10;
+const isAdminName = (name) => String(name || '').toLowerCase() === 'admin';
 
 function toPublicUser(user) {
   const { hash_password, ...rest } = user;
   return rest;
 }
 
-// `permissions` is a Prisma Json column now (see schema.prisma), so it should
-// be stored as a plain object, not a stringified blob. Accept either shape
-// from the client (Staff.jsx sends an object) and normalize.
-function normalizePermissions(permissions) {
-  if (permissions === null || permissions === undefined) return permissions;
-  if (typeof permissions === 'string') {
-    try {
-      JSON.parse(permissions); // validate only
-      return permissions;
-    } catch {
-      throw ApiError.badRequest('permissions must be valid JSON');
-    }
+// permissions / permission_overrides are LongText columns: store JSON strings.
+function normalizeJsonField(value, fieldName) {
+  if (value === null || value === undefined) return value;
+  if (typeof value === 'string') {
+    try { JSON.parse(value); return value; }
+    catch { throw ApiError.badRequest(`${fieldName} must be valid JSON`); }
   }
-  // permissions is an object from the client — column is String @db.LongText,
-  // so it must be persisted as a JSON string
-  return JSON.stringify(permissions);
+  return JSON.stringify(value);
 }
 
-/** GET /api/users?search=&roleId=&isActive=&page=&limit= */
+async function assertRoleNotAdmin(roleId) {
+  const role = await prisma.roles.findUnique({ where: { role_id: Number(roleId) } });
+  if (!role) throw ApiError.badRequest('Role not found');
+  if (isAdminName(role.role_name)) {
+    throw ApiError.forbidden('The Admin role cannot be assigned. Only Librarian privileges can be set.');
+  }
+}
+
+async function loadEditableTarget(id) {
+  const target = await prisma.users.findUnique({ where: { user_id: id }, include: { roles: true } });
+  if (!target) throw ApiError.notFound('User not found');
+  if (isAdminName(target.roles?.role_name)) {
+    throw ApiError.forbidden('Admin accounts cannot be modified by other users.');
+  }
+  return target;
+}
+
 const list = asyncHandler(async (req, res) => {
   const { search, roleId, isActive } = req.query;
   const { skip, take, page, limit } = getPagination(req.query, 20);
@@ -39,13 +48,11 @@ const list = asyncHandler(async (req, res) => {
     ...(roleId ? { role_id: Number(roleId) } : {}),
     ...(isActive !== undefined ? { is_active: isActive === 'true' } : {}),
     ...(search
-      ? {
-          OR: [
-            { first_name: { contains: search } },
-            { last_name: { contains: search } },
-            { email: { contains: search } },
-          ],
-        }
+      ? { OR: [
+          { first_name: { contains: search } },
+          { last_name: { contains: search } },
+          { email: { contains: search } },
+        ] }
       : {}),
   };
 
@@ -57,25 +64,25 @@ const list = asyncHandler(async (req, res) => {
   res.json({ success: true, data: rows.map(toPublicUser), meta: buildMeta(page, limit, totalItems) });
 });
 
-/** GET /api/users/:id */
 const getOne = asyncHandler(async (req, res) => {
   const id = Number(req.params.id);
   if (isNaN(id)) throw ApiError.badRequest('Invalid ID format');
-  
-  const user = await prisma.users.findUnique({
-    where: { user_id: id },
-    include: { roles: true },
-  });
+
+  const user = await prisma.users.findUnique({ where: { user_id: id }, include: { roles: true } });
   if (!user) throw ApiError.notFound('User not found');
   res.json({ success: true, data: toPublicUser(user) });
 });
 
-/** POST /api/users - Admin creates a staff (Admin/Librarian) account */
 const create = asyncHandler(async (req, res) => {
-  const { firstName, lastName, email, phone, password, roleId, isActive, permissions } = req.body;
+  const { firstName, lastName, email, phone, password, roleId, isActive, permissions, permissionOverrides } = req.body;
   if (!firstName || !lastName || !email || !password || !roleId) {
     throw ApiError.badRequest('firstName, lastName, email, password and roleId are required');
   }
+
+  await assertRoleNotAdmin(roleId);
+
+  const existing = await prisma.users.findUnique({ where: { email } });
+  if (existing) throw ApiError.badRequest('A user with this email already exists');
 
   const hash_password = await bcrypt.hash(password, SALT_ROUNDS);
   const user = await prisma.users.create({
@@ -87,7 +94,10 @@ const create = asyncHandler(async (req, res) => {
       hash_password,
       role_id: Number(roleId),
       is_active: isActive !== undefined ? Boolean(isActive) : true,
-      ...(permissions !== undefined ? { permissions: normalizePermissions(permissions) } : {}),
+      ...(permissions !== undefined ? { permissions: normalizeJsonField(permissions, 'permissions') } : {}),
+      ...(permissionOverrides !== undefined
+        ? { permission_overrides: normalizeJsonField(permissionOverrides, 'permissionOverrides') }
+        : {}),
     },
     include: { roles: true },
   });
@@ -96,12 +106,19 @@ const create = asyncHandler(async (req, res) => {
   res.status(201).json({ success: true, data: toPublicUser(user) });
 });
 
-/** PUT /api/users/:id */
 const update = asyncHandler(async (req, res) => {
   const id = Number(req.params.id);
   if (isNaN(id)) throw ApiError.badRequest('Invalid ID format');
 
-  const { firstName, lastName, email, phone, roleId, isActive, password, permissions } = req.body;
+  const { firstName, lastName, email, phone, roleId, isActive, password, permissions, permissionOverrides } = req.body;
+
+  await loadEditableTarget(id);
+  if (roleId !== undefined) await assertRoleNotAdmin(roleId);
+
+  if (email !== undefined) {
+    const clash = await prisma.users.findFirst({ where: { email, NOT: { user_id: id } } });
+    if (clash) throw ApiError.badRequest('A user with this email already exists');
+  }
 
   const data = {
     ...(firstName !== undefined ? { first_name: firstName } : {}),
@@ -110,26 +127,26 @@ const update = asyncHandler(async (req, res) => {
     ...(phone !== undefined ? { phone_number: phone } : {}),
     ...(roleId !== undefined ? { role_id: Number(roleId) } : {}),
     ...(isActive !== undefined ? { is_active: Boolean(isActive) } : {}),
-    ...(permissions !== undefined ? { permissions: normalizePermissions(permissions) } : {}),
+    ...(permissions !== undefined ? { permissions: normalizeJsonField(permissions, 'permissions') } : {}),
+    ...(permissionOverrides !== undefined
+      ? { permission_overrides: normalizeJsonField(permissionOverrides, 'permissionOverrides') }
+      : {}),
   };
-
-  if (password) {
-    data.hash_password = await bcrypt.hash(password, SALT_ROUNDS);
-  }
+  if (password) data.hash_password = await bcrypt.hash(password, SALT_ROUNDS);
 
   const user = await prisma.users.update({ where: { user_id: id }, data, include: { roles: true } });
-
   await logAction({ userId: req.user?.userId, action: 'UPDATE', tableName: 'users', recordId: id, req });
   res.json({ success: true, data: toPublicUser(user) });
 });
 
-/** PATCH /api/users/:id/status  Body: { isActive } - deactivate instead of hard delete */
 const setActive = asyncHandler(async (req, res) => {
   const id = Number(req.params.id);
   if (isNaN(id)) throw ApiError.badRequest('Invalid ID format');
 
   const { isActive } = req.body;
   if (isActive === undefined) throw ApiError.badRequest('isActive is required');
+
+  await loadEditableTarget(id);
 
   const user = await prisma.users.update({ where: { user_id: id }, data: { is_active: Boolean(isActive) } });
   await logAction({
@@ -142,19 +159,21 @@ const setActive = asyncHandler(async (req, res) => {
   res.json({ success: true, data: toPublicUser(user) });
 });
 
-/**
- * DELETE /api/users/:id
- * Hard delete is blocked by design: users are referenced by borrow_records
- * (issued_by), damage_reports (reported_by), donations (received_by) and
- * system_logs, all with onUpdate: Restrict / no cascade. Deleting a user
- * that ever issued a borrow would violate the FK and throw P2003.
- * Prefer PATCH /:id/status to deactivate a staff account instead.
- */
 const remove = asyncHandler(async (req, res) => {
   const id = Number(req.params.id);
   if (isNaN(id)) throw ApiError.badRequest('Invalid ID format');
 
-  await prisma.users.delete({ where: { user_id: id } });
+  await loadEditableTarget(id);
+
+  try {
+    await prisma.users.delete({ where: { user_id: id } });
+  } catch (error) {
+    if (error.code === 'P2003') {
+      throw ApiError.badRequest('Cannot delete this user; they have related records. Deactivate them instead.');
+    }
+    throw error;
+  }
+
   await logAction({ userId: req.user?.userId, action: 'DELETE', tableName: 'users', recordId: id, req });
   res.json({ success: true, message: 'User deleted' });
 });

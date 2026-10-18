@@ -78,7 +78,7 @@ const tableGridStyle = {
 function mapStaff(u) {
   const year = u.created_at ? new Date(u.created_at).getFullYear() : new Date().getFullYear();
   let parsedPermissions = DEFAULT_PERMISSIONS;
-  
+
   if (u.permissions) {
     try {
       parsedPermissions = typeof u.permissions === "string" ? JSON.parse(u.permissions) : u.permissions;
@@ -182,9 +182,11 @@ function ProfileModal({ staff, onClose, onEdit }) {
 
         <div className="px-8 py-4 border-t-2 border-gray-200 bg-gray-50 flex justify-end gap-3 flex-shrink-0">
           <button onClick={onClose} className="px-6 py-2.5 bg-white border-2 border-gray-300 text-gray-600 rounded-xl text-sm font-bold hover:bg-gray-50 transition">Close</button>
-          <button onClick={onEdit} className="flex items-center gap-2 bg-[#055E83] text-white px-6 py-2.5 rounded-xl text-sm font-bold hover:opacity-90 transition shadow-sm">
-            <Edit3 size={14} /> Edit Profile
-          </button>
+          {!admin && (
+            <button onClick={onEdit} className="flex items-center gap-2 bg-[#055E83] text-white px-6 py-2.5 rounded-xl text-sm font-bold hover:opacity-90 transition shadow-sm">
+              <Edit3 size={14} /> Edit Profile
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -296,9 +298,11 @@ function StaffModal({ staff, roles, saving, onClose, onSave }) {
                 <Label required>Role</Label>
                 <SelectInput icon={Briefcase} value={form.roleId} onChange={(e) => set("roleId", e.target.value)}>
                   <option value="">Select a role</option>
-                  {roles.map((r) => (
-                    <option key={r.role_id} value={r.role_id}>{r.role_name}</option>
-                  ))}
+                  {roles
+                    .filter((r) => !isAdminRole(r.role_name))
+                    .map((r) => (
+                      <option key={r.role_id} value={r.role_id}>{r.role_name}</option>
+                    ))}
                 </SelectInput>
               </div>
               {isEdit && (
@@ -647,15 +651,23 @@ export default function Staff() {
                             style={{ backgroundColor: "#055E83", color: "#fff" }}>
                             <Eye size={12} /> View
                           </button>
-                          <button onClick={(e) => { e.stopPropagation(); openEdit(s); }}
-                            className="flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-bold hover:opacity-85 transition shadow-sm"
-                            style={{ backgroundColor: "#E8C110", color: "#055E83" }}>
-                            <Edit3 size={12} /> Edit
-                          </button>
-                          <button onClick={(e) => { e.stopPropagation(); openDelete(s); }}
-                            className="flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs font-bold hover:opacity-85 transition shadow-sm bg-red-50 text-red-500 border border-red-100">
-                            <Trash2 size={12} />
-                          </button>
+                          {admin ? (
+                            <span className="flex items-center gap-1 px-3 py-1.5 text-xs font-bold text-gray-400">
+                              <Lock size={12} /> Protected
+                            </span>
+                          ) : (
+                            <>
+                              <button onClick={(e) => { e.stopPropagation(); openEdit(s); }}
+                                className="flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-bold hover:opacity-85 transition shadow-sm"
+                                style={{ backgroundColor: "#E8C110", color: "#055E83" }}>
+                                <Edit3 size={12} /> Edit
+                              </button>
+                              <button onClick={(e) => { e.stopPropagation(); openDelete(s); }}
+                                className="flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs font-bold hover:opacity-85 transition shadow-sm bg-red-50 text-red-500 border border-red-100">
+                                <Trash2 size={12} />
+                              </button>
+                            </>
+                          )}
                         </div>
                       </div>
                     );

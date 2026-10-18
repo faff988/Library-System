@@ -5,8 +5,24 @@ const logAction = require('../utils/logAction');
 const notify = require('../utils/notify');
 const { getPagination, buildMeta } = require('../utils/pagination');
 
-const ACCESS_LEVELS = ['Admin', 'Staff'];
+// 'Admin' is deliberately not assignable through the API.
+// If your database uses 'Librarian' instead of 'Staff', change it here.
+const ACCESS_LEVELS = ['Staff'];
 const STATUSES = ['Active', 'Inactive', 'On Leave'];
+
+// Nobody can grant Admin through this API.
+const assertCanAssignLevel = (req, accessLevel) => {
+  if (accessLevel === 'Admin') {
+    throw ApiError.forbidden('The Admin access level cannot be assigned. Only Librarian/Staff privileges can be set.');
+  }
+};
+
+// Nobody (including other admins) can modify or delete an Admin record here.
+const assertCanTouch = (req, target) => {
+  if (target.access_level === 'Admin') {
+    throw ApiError.forbidden('Admin accounts cannot be modified by other users.');
+  }
+};
 
 const list = asyncHandler(async (req, res) => {
   const { search, status, positionId, accessLevel } = req.query;
@@ -54,6 +70,7 @@ const create = asyncHandler(async (req, res) => {
   if (!fullName || !dateOfBirth || !phoneNumber || !email) {
     throw ApiError.badRequest('fullName, dateOfBirth, phoneNumber and email are required');
   }
+  assertCanAssignLevel(req, accessLevel);
   if (accessLevel && !ACCESS_LEVELS.includes(accessLevel)) {
     throw ApiError.badRequest(`accessLevel must be one of: ${ACCESS_LEVELS.join(', ')}`);
   }
@@ -75,7 +92,6 @@ const create = asyncHandler(async (req, res) => {
 
   await logAction({ userId: req.user?.userId, action: 'CREATE', tableName: 'staff', recordId: staff.staff_id, req });
 
-  // --- AUTOMATIC NOTIFICATION FOR NEW STAFF ---
   await notify({
     title: 'Staff Added',
     message: `${staff.full_name} was added as a new staff member.`,
@@ -90,12 +106,17 @@ const update = asyncHandler(async (req, res) => {
 
   const { fullName, dateOfBirth, phoneNumber, email, positionId, accessLevel, status } = req.body;
 
+  assertCanAssignLevel(req, accessLevel);
   if (accessLevel !== undefined && !ACCESS_LEVELS.includes(accessLevel)) {
     throw ApiError.badRequest(`accessLevel must be one of: ${ACCESS_LEVELS.join(', ')}`);
   }
   if (status !== undefined && !STATUSES.includes(status)) {
     throw ApiError.badRequest(`status must be one of: ${STATUSES.join(', ')}`);
   }
+
+  const target = await prisma.staff.findUnique({ where: { staff_id: id } });
+  if (!target) throw ApiError.notFound('Staff member not found');
+  assertCanTouch(req, target);
 
   const data = {
     ...(fullName !== undefined ? { full_name: fullName } : {}),
@@ -110,7 +131,6 @@ const update = asyncHandler(async (req, res) => {
   const staff = await prisma.staff.update({ where: { staff_id: id }, data, include: { positions: true } });
   await logAction({ userId: req.user?.userId, action: 'UPDATE', tableName: 'staff', recordId: id, req });
 
-  // --- AUTOMATIC NOTIFICATION FOR STAFF UPDATE ---
   await notify({
     title: 'Staff Updated',
     message: `${staff.full_name}'s profile was updated.`,
@@ -127,10 +147,14 @@ const setStatus = asyncHandler(async (req, res) => {
   if (!STATUSES.includes(status)) {
     throw ApiError.badRequest(`status must be one of: ${STATUSES.join(', ')}`);
   }
+
+  const target = await prisma.staff.findUnique({ where: { staff_id: id } });
+  if (!target) throw ApiError.notFound('Staff member not found');
+  assertCanTouch(req, target);
+
   const staff = await prisma.staff.update({ where: { staff_id: id }, data: { status } });
   await logAction({ userId: req.user?.userId, action: 'UPDATE_STATUS', tableName: 'staff', recordId: id, req, details: { status } });
 
-  // --- AUTOMATIC NOTIFICATION FOR STAFF STATUS CHANGE ---
   await notify({
     title: 'Staff Status Changed',
     message: `${staff.full_name}'s status was changed to ${status}.`,
@@ -141,8 +165,7 @@ const setStatus = asyncHandler(async (req, res) => {
 
 /**
  * DELETE /api/staff/:id
- * Blocked (P2003) if the staff member has related records (e.g. actions they
- * processed, audit logs, borrow records they handled) - `staff` has no
+ * Blocked (P2003) if the staff member has related records. `staff` has no
  * cascading delete on purpose, to preserve the audit trail. Set status to
  * Inactive instead of deleting them.
  */
@@ -152,6 +175,7 @@ const remove = asyncHandler(async (req, res) => {
 
   const existing = await prisma.staff.findUnique({ where: { staff_id: id } });
   if (!existing) throw ApiError.notFound('Staff member not found');
+  assertCanTouch(req, existing);
 
   try {
     await prisma.staff.delete({ where: { staff_id: id } });
@@ -164,7 +188,6 @@ const remove = asyncHandler(async (req, res) => {
 
   await logAction({ userId: req.user?.userId, action: 'DELETE', tableName: 'staff', recordId: id, req });
 
-  // --- AUTOMATIC NOTIFICATION FOR STAFF REMOVAL ---
   await notify({
     title: 'Staff Removed',
     message: `${existing.full_name} was removed from staff.`,

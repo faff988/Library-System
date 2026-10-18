@@ -1,9 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 
-// ASSUMPTION: JWT is stored in localStorage under "token".
-// If you store it elsewhere (cookie, context set at login, etc.),
-// update readUserFromStorage() below accordingly.
 const TOKEN_KEY = "token";
+const USER_KEY = "user";
 
 function decodeToken(token) {
   try {
@@ -16,6 +14,20 @@ function decodeToken(token) {
         .join("")
     );
     return JSON.parse(json);
+  } catch {
+    return null;
+  }
+}
+
+const parseJson = (v) => {
+  if (!v) return {};
+  if (typeof v === "object") return v;
+  try { return JSON.parse(v); } catch { return {}; }
+};
+
+function readStoredUser() {
+  try {
+    return JSON.parse(localStorage.getItem(USER_KEY) || "null");
   } catch {
     return null;
   }
@@ -34,17 +46,28 @@ function readUserFromStorage() {
     return null;
   }
 
-  return payload;
+  // Permissions: prefer the stored user (saved by Login.jsx as a real,
+  // merged object); fall back to whatever the token carries.
+  const stored = readStoredUser();
+  const permissions = stored?.permissions
+    ? parseJson(stored.permissions)
+    : parseJson(payload.permissions);
+
+  return {
+    ...payload,
+    roleName: payload.roleName ?? payload.role ?? stored?.roles?.role_name ?? null,
+    permissions,
+  };
 }
 
 export function useAuth() {
   const [user, setUser] = useState(readUserFromStorage);
 
   useEffect(() => {
-    // Keep in sync if the token changes in another tab, or is
-    // set/cleared by login/logout calls elsewhere in the app.
     const onStorage = (e) => {
-      if (!e.key || e.key === TOKEN_KEY) setUser(readUserFromStorage());
+      if (!e.key || e.key === TOKEN_KEY || e.key === USER_KEY) {
+        setUser(readUserFromStorage());
+      }
     };
     window.addEventListener("storage", onStorage);
     return () => window.removeEventListener("storage", onStorage);
@@ -57,16 +80,17 @@ export function useAuth() {
 
   const logout = useCallback(() => {
     localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(USER_KEY);
     setUser(null);
   }, []);
 
-  // `can('inventory', 'delete')` — Admins always pass. Everyone else needs
-  // an explicit true on that module+action in their token's `permissions`.
-  // Fails closed: no entry = no access, matching the backend middleware.
+  // Admins always pass. Viewing is open to everyone (matches the server).
+  // Everything else needs an explicit true. Fails closed.
   const can = useCallback(
     (moduleId, action) => {
       if (!user) return false;
       if ((user.roleName || "").toLowerCase() === "admin") return true;
+      if (action === "read") return true;
       return !!user.permissions?.[moduleId]?.[action];
     },
     [user]

@@ -18,8 +18,12 @@ router.get('/options/sections', authorize('Admin', 'Librarian'), requirePermissi
 router.get('/:id', authorize('Admin', 'Librarian'), requirePermission(MODULE, 'read'), ctrl.getOne);
 router.get('/:id/history', authorize('Admin', 'Librarian'), requirePermission(MODULE, 'read'), ctrl.history);
 
-router.post('/', authorize('Admin', 'Librarian'), requirePermission(MODULE, 'create'), uploadBookCover.single('coverImage'), ctrl.create);
-router.put('/:id', authorize('Admin', 'Librarian'), requirePermission(MODULE, 'update'), uploadBookCover.single('coverImage'), ctrl.update);
-router.delete('/:id', authorize('Admin', 'Librarian'), requirePermission(MODULE, 'delete'), ctrl.remove);
+// router.post('/', authorize('Admin', 'Librarian'), requirePermission(MODULE, 'create'), uploadBookCover.single('coverImage'), ctrl.create);
+// router.put('/:id', authorize('Admin', 'Librarian'), requirePermission(MODULE, 'update'), uploadBookCover.single('coverImage'), ctrl.update);
+// router.delete('/:id', authorize('Admin', 'Librarian'), requirePermission(MODULE, 'delete'), ctrl.remove);
+
+router.post('/',       requirePermission('inventory', 'create'), ctrl.create);
+router.put('/:id',     requirePermission('inventory', 'update'), ctrl.update);
+router.delete('/:id',  requirePermission('inventory', 'delete'), ctrl.remove);
 
 module.exports = router;
